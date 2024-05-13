@@ -1,3 +1,6 @@
 /MUI/lib/*
 /external_libs/*
 /.vscode/*
+app/out/*
+
+!.gitignore
