@@ -1,8 +1,6 @@
-#include<window.h>
-#include<SDL2/SDL.h>
+#include<MUI/window.h>
 // #include<log.h>
-
-SDL_Window* getWindow(char* window_name){
+SDL_Window* initAndGetWindow(char* window_name){
         /* Initialises data */
     SDL_Window *window = NULL;
     int sdlInit = SDL_Init(SDL_INIT_EVERYTHING);

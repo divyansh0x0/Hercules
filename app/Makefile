@@ -1,31 +1,36 @@
 #output folder of compilation
-OUT := lib
+OUT := out
 #lists all .c files in src directory
-C_FILES := $(wildcard src/*.c) 
+CPP_FILES := $(wildcard src/*.cpp) $(wildcard src/MUI/*.cpp)
 #$(VARIABLE:OLD_SUFFIX=NEW_SUFFIX) changes extension of all .c files to .o
 #creates object file names from .c file names and stores
-O_FILES =  $(addprefix $(OUT)/, $(notdir $(C_FILES:.c=.o))) 
-NAME := $(OUT)/libMUI.a
+O_FILES =  $(addprefix $(OUT)/, $(notdir $(C_FILES:.cpp=.o))) 
+NAME := $(OUT)/crystal
 
-CC := gcc
+
+CXX := g++
 
 PROJECT_INCLUDE_FILES := include
 
 EXTERNAL_INCLUDE_FILES := ../external_libs/include
-LIB := ../external_libs/lib
+LIB := ../MUI/lib
+EXTERNAL_LIBS := ../external_libs/lib
 LINKER_FLAGS := -lSDL2
 
 
 all: $(NAME)
-	echo "BUILD SUCCESS"
+	
+
+	
 
 #compile all c files into object files
-$(O_FILES): $(C_FILES)
-	$(CC) -c $< -I $(EXTERNAL_INCLUDE_FILES) -I $(PROJECT_INCLUDE_FILES)  -L $(LIB) -w $(LINKER_FLAGS)  -o $@
+$(O_FILES):
 
-#build static library. Preqreuisites are .o files and libMui.a is target
-$(NAME): $(O_FILES)
-	ar rcs $(NAME)  $(O_FILES) 
+#build exe
+$(NAME):  $(CPP_FILES)
+	if exist $(OUT)\ (echo lib directory exists ) else (mkdir $(OUT)\)
+	$(CXX) $(CPP_FILES)  -I $(EXTERNAL_INCLUDE_FILES) -I $(PROJECT_INCLUDE_FILES)  -L $(LIB) -L $(EXTERNAL_LIBS) -w $(LINKER_FLAGS) -o $(NAME)
+	$(NAME).exe
 
 
 
