@@ -43,6 +43,7 @@ SDL_Window *initAndGetSDLWindow(int width, int height)
 //                                          Public methods
 //------------------------------------------------------------------------------------------
 
+    
 Engine::Engine(int width, int height)
 {
     window = initAndGetSDLWindow(width, height);
@@ -64,7 +65,7 @@ void Engine::hideWindow()
 void Engine::destroy()
 {
     isRunning = false;
-
+    delete renderer;
     SDL_DestroyWindow(window);
 }
 
@@ -112,9 +113,7 @@ void Engine::doInput()
         switch (window_event.type)
         {
         case SDL_QUIT:
-            logger::info(std::to_string(isRunning));
             isRunning = false;
-            logger::info(std::to_string(isRunning));
             break;
 
         default:

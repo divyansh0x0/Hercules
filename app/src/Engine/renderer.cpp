@@ -1,9 +1,12 @@
 #include <Engine/renderer.h>
 #include <SDL2/SDL.h>
+#include <logger.h>
 Renderer::Renderer(SDL_Window *window)
 {
     this->window = window;
     this->sdl_renderer = SDL_CreateRenderer(window,-1,SDL_RENDERER_ACCELERATED);
+    logger::error(SDL_GetError());
+    
 }
 
 void Renderer::init()
@@ -33,8 +36,10 @@ void Renderer::render()
 
     clear(sdl_renderer);
     draw(sdl_renderer, &rect);
+    // logger::info(SDL_GetError());
 }
 
 Renderer::~Renderer()
 {
+    SDL_DestroyRenderer(sdl_renderer);
 }
