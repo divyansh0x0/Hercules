@@ -5,7 +5,7 @@ SRC_FILES := $(wildcard src/*.cpp) $(wildcard src/Engine/*.cpp)
 #$(VARIABLE:OLD_SUFFIX=NEW_SUFFIX) changes extension of all .c files to .o
 #creates object file names from .c file names and stores
 O_FILES = $(addprefix $(OUT)/,$(notdir $(SRC_FILES:.cpp=.o)))  
-NAME := $(OUT)/crystal
+NAME := $(OUT)/hercules
 
 
 CXX := g++
@@ -17,11 +17,11 @@ EXTERNAL_INCLUDE_FILES := ../external_libs/include
 EXTERNAL_LIBS := ../external_libs/lib
 LINKER_FLAGS := -w -lSDL2
 
-CFLAGS := -I $(EXTERNAL_INCLUDE_FILES) -I $(PROJECT_INCLUDE_FILES)
+CFLAGS := -g -I $(EXTERNAL_INCLUDE_FILES) -I $(PROJECT_INCLUDE_FILES)
 
 LIBS_FLAGS := -L $(EXTERNAL_LIBS) 
 
-all: $(NAME)
+run: $(NAME)
 	$(NAME).exe
 
 	
@@ -42,7 +42,10 @@ $(NAME) : $(O_FILES)
 	$(CXX) -o $(NAME) $(addprefix $(OUT)/,$(notdir $(O_FILES))) $(LIBS_FLAGS) $(LINKER_FLAGS)
 
 
-.PHONY:  all
+debug:$(NAME)
+	gdb $(NAME).exe
+
+.PHONY:  run, debug
 
 
 
