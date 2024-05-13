@@ -16,40 +16,33 @@
 // char *window_name = "example SDL2 VULKAN APP";
 // int KEYS[322];
 #include <log.h>
-#include <MUI/window.h>
-bool isRunning = false;
-char *window_name = "crystal";
+#include <Engine/engine.h>
 
-void handleEvent(SDL_Event event)
-{
-    switch (event.type)
-    {
-    case SDL_QUIT:
-        isRunning = false;
-        break;
-    default:
-        break;
-    }
-}
+// void handleEvent(SDL_Event event)
+// {
+//     switch (event.type)
+//     {
+//     case SDL_QUIT:
+//         isRunning = false;
+//         break;
+//     default:
+//         break;
+//     }
+// }
 
 int main(int argc, char *argv[])
 {
-    SDL_Window *window = initAndGetWindow(window_name);
-    log::info("Hello world");
-    log::warn("Hello world");
+    Engine engine(1000,800);
 
-    log::error("Hello world");
-    log::success("Hello world");
+    engine.showWindow();
+    // log::info("Hello world");
+    // log::warn("Hello world");
 
-    isRunning = true;
-    while (isRunning)
-    {
-        SDL_Event window_event;
-        while (SDL_PollEvent(&window_event))
-        {
-            handleEvent(window_event);
-        }
-    }
+    // log::error("Hello world");
+    // log::success("Hello world");
+
+
+    engine.loop();
     return 0;
     // while (isRunning != 0)
     // {

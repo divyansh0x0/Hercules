@@ -1,6 +1,5 @@
 #include <log.h>
-#include <stdio.h>
-#include <stdarg.h>
+#include <iostream>
 // #include <string.h>
 // #include <iostream>
 #define RED "\x1b[31m"
@@ -14,22 +13,23 @@
 // Implementation of variable arguments using variadic templates.
 // using namespace std;
 
-void log::info(const char *s)
+void log::info(std::string s)
 {
-    printf("%s%s%s", CYAN, s, RESET_NEWLINE);
+    std::cout<< CYAN << s << RESET_NEWLINE;
 }
 
-void log::success(const char *s)
+void log::success(std::string s)
 {
-    printf("%s%s%s", GREEN, s, RESET_NEWLINE);
+    std::cout<< GREEN << s << RESET_NEWLINE;
+    // printf("%s%s%s", GREEN, s, RESET_NEWLINE);
 }
 
-void log::error(const char *s)
+void log::error(std::string s)
 {
-    printf("%s%s%s", RED, s, RESET_NEWLINE);
+    std::cout<< RED << s << RESET_NEWLINE;
 }
 
-void log::warn(const char *s)
+void log::warn(std::string s)
 {
-    printf("%s%s%s", YELLOW, s, RESET_NEWLINE);
+    std::cout<< YELLOW << s << RESET_NEWLINE;
 }

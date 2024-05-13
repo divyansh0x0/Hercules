@@ -1,7 +1,7 @@
 #output folder of compilation
 OUT := out
 #lists all .c files in src directory
-CPP_FILES := $(wildcard src/*.cpp) $(wildcard src/MUI/*.cpp)
+CPP_FILES := $(wildcard src/*.cpp) $(wildcard src/Engine/*.cpp)
 #$(VARIABLE:OLD_SUFFIX=NEW_SUFFIX) changes extension of all .c files to .o
 #creates object file names from .c file names and stores
 O_FILES =  $(addprefix $(OUT)/, $(notdir $(C_FILES:.cpp=.o))) 
