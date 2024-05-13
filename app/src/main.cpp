@@ -15,7 +15,7 @@
 // uint8_t isRunning = 0;
 // char *window_name = "example SDL2 VULKAN APP";
 // int KEYS[322];
-#include <log.h>
+#include <logger.h>
 #include <Engine/engine.h>
 
 // void handleEvent(SDL_Event event)
@@ -35,11 +35,11 @@ int main(int argc, char *argv[])
     Engine engine(1000,800);
 
     engine.showWindow();
-    // log::info("Hello world");
-    // log::warn("Hello world");
+    // logger::info("Hello world");
+    // logger::warn("Hello world");
 
-    // log::error("Hello world");
-    // log::success("Hello world");
+    // logger::error("Hello world");
+    // logger::success("Hello world");
 
 
     engine.loop();

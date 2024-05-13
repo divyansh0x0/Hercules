@@ -1,8 +1,10 @@
 #pragma once
-#include <SDL2/SDL.h>
+// #include <SDL2/SDL.h>
 #include<Engine/renderer.h>
 // #include <vulkan/vk_types.h>
 // #include <vk_initializers.h>
+struct SDL_Window;
+
 #define VK_CHECK(x)                                                 \
 	do                                                              \
 	{                                                               \
@@ -22,8 +24,7 @@ private:
     void doInput();
 
 public:
-    SDL_Window *window = NULL;
-    SDL_Renderer *sdl_renderer = NULL;
+    SDL_Window *window;
     bool isRunning = false;
     Engine(int width, int height);
     void showWindow();

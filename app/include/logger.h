@@ -1,6 +1,8 @@
 #pragma once
-#include<string>
-namespace log
+
+#include <string>
+
+namespace logger
 {
     void info(std::string s);
     void warn(std::string s);
