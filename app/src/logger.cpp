@@ -15,18 +15,34 @@ void logger::info(std::string s)
 {
     std::cout<< CYAN << s << RESET_NEWLINE;
 }
-
+void logger::info(const char* s)
+{
+    std::cout<< CYAN << s << RESET_NEWLINE;
+}
 void logger::success(std::string s)
 {
     std::cout<< GREEN << s << RESET_NEWLINE;
     // printf("%s%s%s", GREEN, s, RESET_NEWLINE);
+}
+
+void logger::success(const char* s)
+{
+    std::cout<< GREEN << s << RESET_NEWLINE;
 }
 void logger::error(std::string s)
 {
     std::cout<< RED << s << RESET_NEWLINE;
 }
 
+void logger::error(const char* s)
+{
+    std::cout<< RED << s << RESET_NEWLINE;
+}
 void logger::warn(std::string s)
+{
+    std::cout<< YELLOW << s << RESET_NEWLINE;
+}
+void logger::warn(const char* s)
 {
     std::cout<< YELLOW << s << RESET_NEWLINE;
 }

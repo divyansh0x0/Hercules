@@ -1,6 +1,6 @@
 #pragma once
 // #include <SDL2/SDL.h>
-#include<Engine/renderer.h>
+#include "Engine/renderer.h"
 // #include <vulkan/vk_types.h>
 // #include <vk_initializers.h>
 struct SDL_Window;
@@ -20,16 +20,16 @@ struct SDL_Window;
 class Engine
 {
 private:
-    Renderer* renderer;
+    Renderer* renderer_;
     void doInput();
 
 public:
-    SDL_Window *window;
-    bool isRunning = false;
+    SDL_Window *window_;
+    bool is_engine_running = false;
     Engine(int width, int height);
-    void showWindow();
-    void hideWindow();
-    void destroy();
-    void loop();
+    void ShowWindow();
+    void HideWindow();
+    void DestroyEngine();
+    void Loop();
     ~Engine();
 };

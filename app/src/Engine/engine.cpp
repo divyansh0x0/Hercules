@@ -1,5 +1,5 @@
-#include <Engine/engine.h>
-#include <logger.h>
+#include "Engine/engine.h"
+#include "logger.h"
 #include <string>
 #include <chrono>
 #include <SDL2/SDL.h>
@@ -12,6 +12,9 @@
 void update(unsigned int dt);
 SDL_Window *initAndGetSDLWindow(int width, int height)
 {
+
+    SDL_Vulkan_LoadLibrary(nullptr);
+
     /* Initialises data */
     SDL_Window *window = NULL;
     int sdlInit = SDL_Init(SDL_INIT_VIDEO);
@@ -21,7 +24,7 @@ SDL_Window *initAndGetSDLWindow(int width, int height)
      * Returns 0 on success or a negative error code on failure using SDL_GetError().
      */
     // SDL_Vulkan_LoadLibrary(nullotr)
-    window = SDL_CreateWindow(WINDOW_NAME, SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED, width, height, SDL_WINDOW_OPENGL | SDL_WINDOW_RESIZABLE | SDL_WINDOW_HIDDEN);
+    window = SDL_CreateWindow(WINDOW_NAME, SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED, width, height, SDL_WINDOW_VULKAN | SDL_WINDOW_RESIZABLE | SDL_WINDOW_HIDDEN);
     if (sdlInit != 0)
     {
         // fprintf(stderr, "SDL failed to initialise: %s\n", SDL_GetError());
@@ -46,37 +49,39 @@ SDL_Window *initAndGetSDLWindow(int width, int height)
     
 Engine::Engine(int width, int height)
 {
-    window = initAndGetSDLWindow(width, height);
-    renderer = new Renderer(window);
+    window_ = initAndGetSDLWindow(width, height);
+    renderer_ = new Renderer(window_);
 }
 Engine::~Engine()
 {
-    destroy();
+    DestroyEngine();
 }
-void Engine::showWindow()
+void Engine::ShowWindow()
 {
-    isRunning = true;
-    SDL_ShowWindow(window);
+    is_engine_running = true;
+    SDL_ShowWindow(window_);
 }
-void Engine::hideWindow()
+void Engine::HideWindow()
 {
-    SDL_HideWindow(window);
+    SDL_HideWindow(window_);
 }
-void Engine::destroy()
+void Engine::DestroyEngine()
 {
-    isRunning = false;
-    delete renderer;
-    SDL_DestroyWindow(window);
+    is_engine_running = false;
+    delete renderer_;
+    SDL_DestroyWindow(window_);
+    SDL_Vulkan_UnloadLibrary();
+    SDL_Quit();
 }
 
 // game loop
-void Engine::loop()
+void Engine::Loop()
 {
     using namespace std::chrono;
     auto start = high_resolution_clock::now();
     unsigned int dt = 0;
-    renderer->init();
-    while (isRunning)
+    renderer_->Initialize();
+    while (is_engine_running)
     {
 
         doInput();
@@ -84,7 +89,7 @@ void Engine::loop()
         if (dt > 1000 / 60)
         {
             update(dt);
-            renderer->render();
+           renderer_->Render();
             auto end = high_resolution_clock::now();
             start = end;
         }
@@ -113,7 +118,7 @@ void Engine::doInput()
         switch (window_event.type)
         {
         case SDL_QUIT:
-            isRunning = false;
+            is_engine_running = false;
             break;
 
         default:

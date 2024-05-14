@@ -1,15 +1,16 @@
 // for initializing and shutdown functions
 #define SDL_MAIN_HANDLED
-#include <logger.h>
-#include <Engine/engine.h>
+#include "logger.h"
+#include "Engine/engine.h"
 
 int main(int argc, char *argv[])
 {
+    logger::info("hello");
     Engine engine(1000,800);
 
-    engine.showWindow();
+    engine.ShowWindow();
 
 
-    engine.loop();
+    engine.Loop();
     return 0;
 }

@@ -1,5 +1,5 @@
 #output folder of compilation
-OUT := out
+OUT := ../out
 #lists all .c files in src directory
 SRC_FILES := $(wildcard src/*.cpp) $(wildcard src/Engine/*.cpp)
 #$(VARIABLE:OLD_SUFFIX=NEW_SUFFIX) changes extension of all .c files to .o
@@ -15,11 +15,11 @@ PROJECT_INCLUDE_FILES := include
 EXTERNAL_INCLUDE_FILES := ../external_libs/include
 # LIB := ../MUI/lib
 EXTERNAL_LIBS := ../external_libs/lib
-LINKER_FLAGS := -w -lSDL2
 
 CFLAGS := -g -I $(EXTERNAL_INCLUDE_FILES) -I $(PROJECT_INCLUDE_FILES)
 
 LIBS_FLAGS := -L $(EXTERNAL_LIBS) 
+LINKER_FLAGS := -w -lSDL2 -lvulkan-1
 
 run: $(NAME)
 	$(NAME).exe
@@ -30,9 +30,8 @@ run: $(NAME)
 vpath %.cpp $(dir $(SRC_FILES))
 
 $(OUT)/%.o: %.cpp
+	if not exist ..\$(notdir $(OUT)) (mkdir ..\$(notdir $(OUT))\) 
 	@echo CREATING .o FILES
-	@if exist $(OUT)\ (echo lib directory exists ) else (mkdir $(OUT)\)
-
 	$(CXX) $(CFLAGS) -I. -c $< -o $@
 	
 
