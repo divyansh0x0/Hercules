@@ -16,6 +16,9 @@ EXTERNAL_INCLUDE_FILES := ../external_libs/include
 # LIB := ../MUI/lib
 EXTERNAL_LIBS := ../external_libs/lib
 
+
+
+COMPILATION_ARGS = -pedantic -Wall -Wlogical-op -Wmissing-include-dirs -Werror -Wno-unused
 CFLAGS := -g -I $(EXTERNAL_INCLUDE_FILES) -I $(PROJECT_INCLUDE_FILES)
 
 LIBS_FLAGS := -L $(EXTERNAL_LIBS) 
@@ -32,7 +35,7 @@ vpath %.cpp $(dir $(SRC_FILES))
 $(OUT)/%.o: %.cpp
 	if not exist ..\$(notdir $(OUT)) (mkdir ..\$(notdir $(OUT))\) 
 	@echo CREATING .o FILE $@
-	$(CXX) $(CFLAGS) -I. -c $< -o $@
+	$(CXX) $(CFLAGS) $(COMPILATION_ARGS) -c $< -o $@ 
 	
 
 

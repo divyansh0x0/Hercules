@@ -6,13 +6,14 @@
 
 class Renderer{
     private:
-        struct VkInstance_T* vulkan_instance_;
-        struct VkDevice_T* gpu_;
+        VkInstance vulkan_instance_;
+        VkDevice gpu_;
         SDL_Renderer* sdl_renderer_;
         SDL_Window* window_;
+        VkSurfaceKHR vulkan_surface_;
     public:
         Renderer();
-        bool Initialize(bool enable_debug_logs);
+        bool Initialize();
         void Render();
         void set_window(SDL_Window* window);
         ~Renderer();

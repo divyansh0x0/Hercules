@@ -81,7 +81,7 @@ void Engine::Loop()
     using namespace std::chrono;
     auto start = high_resolution_clock::now();
     unsigned int dt = 0;
-    bool is_initialized = renderer_.Initialize(true);
+    bool is_initialized = renderer_.Initialize();
     if(!is_initialized)
         throw std::runtime_error("Vulkan renderer couldn't be initialized");
     while (is_engine_running)
