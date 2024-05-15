@@ -11,8 +11,9 @@ class Renderer{
         SDL_Renderer* sdl_renderer_;
         SDL_Window* window_;
     public:
-        Renderer(SDL_Window* window);
-        bool Initialize();
+        Renderer();
+        bool Initialize(bool enable_debug_logs);
         void Render();
+        void set_window(SDL_Window* window);
         ~Renderer();
 };

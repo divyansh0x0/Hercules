@@ -20,7 +20,7 @@ struct SDL_Window;
 class Engine
 {
 private:
-    Renderer* renderer_;
+    Renderer renderer_;
     void doInput();
 
 public:

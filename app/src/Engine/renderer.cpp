@@ -3,8 +3,13 @@
 #include <SDL2/SDL_vulkan.h>
 #include "logger.h"
 #include <string>
-#include<vector>
-
+#include <vector>
+// #include <vulkan/vulkan_raii.hpp>
+// #ifdef NDEBUG
+// const bool enableValidationLayers = false;
+// #else
+const bool enableValidationLayers = true;
+// #endif
 // #define
 
 // #ifdef _WIN32
@@ -13,6 +18,7 @@
 // #define PLATFORM_SURFACE_EXTENSION_NAME VK_KHR_WIN32_SURFACE_EXTENSION_NAME
 // #endif
 
+#define ARRAY_LENGTH(arr) sizeof(arr) / sizeof(arr[0])
 const VkApplicationInfo kAapplicationInfo = {
     VK_STRUCTURE_TYPE_APPLICATION_INFO,
     nullptr,
@@ -23,22 +29,64 @@ const VkApplicationInfo kAapplicationInfo = {
     VK_API_VERSION_1_0
 
 };
-bool GPUHasAllFeatures(VkPhysicalDevice gpu){
+const char *kValidationLayers[] = {"VK_LAYER_KHRONOS_validation"};
+bool GPUHasAllFeatures(VkPhysicalDevice gpu)
+{
     VkPhysicalDeviceFeatures deviceFeatures;
-    vkGetPhysicalDeviceFeatures(gpu,&deviceFeatures);
+    vkGetPhysicalDeviceFeatures(gpu, &deviceFeatures);
     return deviceFeatures.geometryShader;
 }
+struct QueueFamilyInfo
+{
+    bool are_all_queues_available;
+    uint32_t graphics_family_index;
+    uint32_t present_family_index;
+    uint32_t queue_count;
+};
 ///-----------------------------------------------------------------------------------------
 //                                          Utility methods
 //------------------------------------------------------------------------------------------
-VkPhysicalDevice* GetSuitableGPUs(VkInstance vulkan_instance){
-    uint32_t physicalDeviceCount;
-    vkEnumeratePhysicalDevices(vulkan_instance, &physicalDeviceCount, nullptr);
-    VkPhysicalDevice physicalDevices[physicalDeviceCount];
-    vkEnumeratePhysicalDevices(vulkan_instance, &physicalDeviceCount, physicalDevices);
+bool checkValidationLayerSupport()
+{
+    uint32_t layerCount;
+    vkEnumerateInstanceLayerProperties(&layerCount, nullptr);
+
+    VkLayerProperties availableLayers[layerCount];
+    vkEnumerateInstanceLayerProperties(&layerCount, availableLayers);
+
+    for (const char *layerName : kValidationLayers)
+    {
+        bool layerFound = false;
+
+        logger::info("DEBUG LAYERS FOUND:");
+        for (const VkLayerProperties layerProperties : availableLayers)
+        {
+            logger::info("\t" + std::string(layerProperties.layerName));
+            if (strcmp(layerName, layerProperties.layerName) == 0)
+            {
+                layerFound = true;
+                break;
+            }
+        }
+
+        if (!layerFound)
+        {
+            return false;
+        }
+    }
+
+    return true;
+}
+VkPhysicalDevice *GetSuitableGPUs(VkInstance vulkan_instance)
+{
+    
+    uint32_t physical_device_count;
+    vkEnumeratePhysicalDevices(vulkan_instance, &physical_device_count, nullptr);
+    VkPhysicalDevice physical_devices[physical_device_count];
+    vkEnumeratePhysicalDevices(vulkan_instance, &physical_device_count, physical_devices);
 
     std::vector<VkPhysicalDevice> suitableDevices;
-    if (physicalDeviceCount == 0)
+    if (physical_device_count == 0)
     {
         logger::error("Failed to find GPUs with Vulkan support!");
         return nullptr;
@@ -53,43 +101,78 @@ VkPhysicalDevice* GetSuitableGPUs(VkInstance vulkan_instance){
 
         logger::info("Following graphics cards were found:");
         VkPhysicalDeviceProperties device_properties;
-        for (VkPhysicalDevice device : physicalDevices)
+        for (VkPhysicalDevice device : physical_devices)
         {
             vkGetPhysicalDeviceProperties(device, &device_properties);
 
             logger::info("\t DEVICE NAME:" + std::string(device_properties.deviceName) +
                          " | DEVICE TYPE:" + device_type_names[device_properties.deviceType] +
                          "| API VERSION:" + std::to_string(device_properties.apiVersion));
-            if((device_properties.deviceType == VK_PHYSICAL_DEVICE_TYPE_DISCRETE_GPU || device_properties.deviceType == VK_PHYSICAL_DEVICE_TYPE_INTEGRATED_GPU) && GPUHasAllFeatures(device))
+            if ((device_properties.deviceType == VK_PHYSICAL_DEVICE_TYPE_DISCRETE_GPU || device_properties.deviceType == VK_PHYSICAL_DEVICE_TYPE_INTEGRATED_GPU) && GPUHasAllFeatures(device))
                 suitableDevices.push_back(device);
         }
     }
     return suitableDevices.data();
 }
-    
 
+QueueFamilyInfo getQueueFamilyInfo(VkPhysicalDevice gpu, VkInstance vulkan_instance)
+{
+    uint32_t queue_family_count;
+    vkGetPhysicalDeviceQueueFamilyProperties(gpu, &queue_family_count, nullptr);
+    VkQueueFamilyProperties queueFamilies[queue_family_count];
+    vkGetPhysicalDeviceQueueFamilyProperties(gpu, &queue_family_count, queueFamilies);
+
+    // VkSurfaceKHR surface;
+    QueueFamilyInfo queue_family_info{};
+    int i = 0;
+    for (const VkQueueFamilyProperties queueFamily : queueFamilies)
+    {
+        if (queueFamily.queueFlags & VK_QUEUE_GRAPHICS_BIT)
+        {
+            VkBool32 is_present_supportted = false;
+            // vkGetPhysicalDeviceSurfaceSupportKHR()
+            queue_family_info.are_all_queues_available = is_present_supportted;
+            queue_family_info.queue_count++;
+            queue_family_info.graphics_family_index = i;
+        }
+
+        i++;
+    }
+    return queue_family_info;
+}
 
 ///-----------------------------------------------------------------------------------------
 //                                          Public methods
 //------------------------------------------------------------------------------------------
 
-Renderer::Renderer(SDL_Window *window)
+Renderer::Renderer()
 {
-    this->window_ = window;
-    this->sdl_renderer_ = SDL_CreateRenderer(window, -1, SDL_RENDERER_ACCELERATED);
-    logger::error(SDL_GetError());
+    logger::success("Renderer object created");
 }
+void Renderer::set_window(SDL_Window* window){
+    this->window_ = window;
+    this->sdl_renderer_ = SDL_CreateRenderer(window,-1,0);
+    if(sdl_renderer_ == nullptr)
+        logger::error(SDL_GetError());
 
-bool Renderer::Initialize()
+}
+bool Renderer::Initialize(bool enable_debug_logs)
 {
-    logger::info("INITIALIZING RENDERER");
-    unsigned int extensionCount;
-    SDL_Vulkan_GetInstanceExtensions(window_, &extensionCount, nullptr);
-    const char *extensionNames[extensionCount];
-    SDL_Vulkan_GetInstanceExtensions(window_, &extensionCount, extensionNames);
+    if(window_ == nullptr){
+        logger::error("Call set_window() before initialization of renderer");
+        return false;
+    }
 
     // initialize vulkanInstance variable
-    if (extensionCount == 0)
+    logger::info("INITIALIZING RENDERER");
+    unsigned int extension_count;
+    SDL_Vulkan_GetInstanceExtensions(window_, &extension_count, nullptr);
+    const char *extension_names[extension_count];
+
+    SDL_bool b1 = SDL_Vulkan_GetInstanceExtensions(window_, &extension_count, extension_names);
+    if(b1)
+        logger::success("Extension created successfully");
+    if (extension_count == 0)
     {
         logger::error("EXTENSION COUNT IS ZERO");
     }
@@ -97,94 +180,93 @@ bool Renderer::Initialize()
     {
         logger::info("Available vulkan extensions:");
 
-        for (const char *extension : extensionNames)
+        for (const char *extension : extension_names)
         {
             logger::info("\t" + std::string(extension));
         }
     }
 
-    VkInstanceCreateInfo vulkanInstanceInfo = {
+    const char **enabled_layer_names = nullptr;
+    uint32_t enabled_layer_count = 0;
+    if (enable_debug_logs)
+    {
+        if (!checkValidationLayerSupport())
+        {
+            logger::error("validation layers requested because debugging is enabled, but not available!");
+            return false;
+        }
+        enabled_layer_names = kValidationLayers;
+        enabled_layer_count = ARRAY_LENGTH(kValidationLayers);
+    }
+    VkInstanceCreateInfo vulkan_instance_info = {
         VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO, // sType
         nullptr,                                // pNext
         0,                                      // flags
         &kAapplicationInfo,                     // pApplicationInfo
-        0,                                      // enabledLayerCount
-        nullptr,                                // ppEnabledLayerNames
-        extensionCount,                         // enabledExtensionCount
-        extensionNames                          // ppEnabledExtensionNames
+        enabled_layer_count,                    // enabledLayerCount
+        enabled_layer_names,                    // ppEnabledLayerNames
+        extension_count,                        // enabledExtensionCount
+        extension_names                         // ppEnabledExtensionNames
     };
-    VkResult instance_creation_code = vkCreateInstance(&vulkanInstanceInfo, nullptr, &vulkan_instance_);
+    VkResult instance_creation_code = vkCreateInstance(&vulkan_instance_info, nullptr, &vulkan_instance_);
     if (instance_creation_code != VK_SUCCESS)
     {
         logger::error("VULKAN INSTANCE CREATION FAILED! : " + getTranslatedErrorCode(instance_creation_code));
         return false;
     }
-
     // Finding a gpu with vulkan support
-    VkPhysicalDevice* gpus = GetSuitableGPUs(vulkan_instance_);
-    if(gpus == nullptr)
+    VkPhysicalDevice *gpus = GetSuitableGPUs(vulkan_instance_);
+    if (gpus == nullptr)
         return false;
 
+    VkPhysicalDevice suitableGPU = gpus[0]; //chosing first gpu as suitable gpus
+    // vk::PhysicalDevice physicalDevice(suitableGPU)
 
-    VkPhysicalDevice gpu = gpus[0];
-    uint32_t queuefamilyCount;
-    vkGetPhysicalDeviceQueueFamilyProperties(gpu, &queuefamilyCount, nullptr);
-    VkQueueFamilyProperties queueFamilies[queuefamilyCount];
-    vkGetPhysicalDeviceQueueFamilyProperties(gpu, &queuefamilyCount, queueFamilies);
-
-    VkSurfaceKHR surface;
-    SDL_Vulkan_CreateSurface(window_, vulkan_instance_, &surface);
-
-    uint32_t graphicsQueueIndex = UINT32_MAX;
-    uint32_t presentQueueIndex = UINT32_MAX;
-    VkBool32 support;
-    uint32_t i = 0;
-    for (VkQueueFamilyProperties queueFamily : queueFamilies)
-    {
-        if (graphicsQueueIndex == UINT32_MAX && queueFamily.queueCount > 0 && queueFamily.queueFlags & VK_QUEUE_GRAPHICS_BIT)
-            graphicsQueueIndex = i;
-        if (presentQueueIndex == UINT32_MAX)
-        {
-            vkGetPhysicalDeviceSurfaceSupportKHR(gpu, i, surface, &support);
-            if (support)
-                presentQueueIndex = i;
-        }
-        ++i;
-    }
-
-    float queuePriority = 1.0f;
-    VkDeviceQueueCreateInfo queueInfo = {
+    const float queue_priority_level = 1.0f;
+    QueueFamilyInfo queue_family_info = getQueueFamilyInfo(suitableGPU, vulkan_instance_);
+    VkDeviceQueueCreateInfo queue_create_info = {
         VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO, // sType
         nullptr,                                    // pNext
         0,                                          // flags
-        graphicsQueueIndex,                         // graphicsQueueIndex
-        1,                                          // queueCount
-        &queuePriority,                             // pQueuePriorities
+        queue_family_info.graphics_family_index,    // queueFamilyIndex
+        queue_family_info.queue_count,              // queueCount
+        &queue_priority_level                       // pQueuePriorities
     };
-    VkPhysicalDeviceFeatures deviceFeatures = {};
-    const char *deviceExtensionNames[] = {VK_KHR_SWAPCHAIN_EXTENSION_NAME};
-    VkDeviceCreateInfo createInfo = {
+
+    VkPhysicalDeviceFeatures deviceFeatures{};
+
+    VkDeviceCreateInfo device_create_info{
         VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO, // sType
         nullptr,                              // pNext
         0,                                    // flags
         1,                                    // queueCreateInfoCount
-        &queueInfo,                           // pQueueCreateInfos
-        0,                                    // enabledLayerCount
-        nullptr,                              // ppEnabledLayerNames
-        1,                                    // enabledExtensionCount
-        deviceExtensionNames,                 // ppEnabledExtensionNames
+        &queue_create_info,                   // pQueueCreateInfos
+        enabled_layer_count,                  // enabledLayerCount
+        enabled_layer_names,                  // ppEnabledLayerNames
+        extension_count,                      // enabledExtensionCount
+        extension_names,                      // ppEnabledExtensionNames
         &deviceFeatures,                      // pEnabledFeatures
     };
 
-    vkCreateDevice(gpu, &createInfo, nullptr, &gpu_);
+    // creates a device and stores it in global gpu_
+    VkResult device_creation_result = vkCreateDevice(suitableGPU, &device_create_info, nullptr, &gpu_);
+    if (device_creation_result != VK_SUCCESS)
+    {
+        for(const char* extension_name: extension_names)
+            logger::error(std::string(extension_name));
+        logger::error("DEVICE CREATION FAILED ERRORCODE: " + std::to_string(device_creation_result) + " | " + getTranslatedErrorCode(device_creation_result));
+        return false;
+    }
+    logger::success("DEVICE CREATED SUCCESSFULLY");
 
-    VkQueue graphicsQueue;
-    vkGetDeviceQueue(gpu_, graphicsQueueIndex, 0, &graphicsQueue);
 
-    VkQueue presentQueue;
-    vkGetDeviceQueue(gpu_, presentQueueIndex, 0, &presentQueue);
+    VkQueue graphics_queue;
+    vkGetDeviceQueue(gpu_, queue_family_info.graphics_family_index, 0, &graphics_queue);
 
-    logger::success("RENDERER WAS INITIALIZED SUCCESSFULLY");
+    // VkQueue presentQueue;
+    // vkGetDeviceQueue(gpu_, presentQueueIndex, 0, &presentQueue);
+
+    // logger::success("RENDERER WAS INITIALIZED SUCCESSFULLY");
 
     // SDL_Log("Initialized with errors: %s", SDL_GetError());
     return true;
@@ -213,11 +295,11 @@ void Renderer::Render()
 
     clear(sdl_renderer_);
     draw(sdl_renderer_, &rect);
-    // logger::info(SDL_GetError());
 }
 
 Renderer::~Renderer()
 {
+    logger::warn("Renderer destroyed");
     vkDestroyDevice(gpu_, nullptr);
     vkDestroyInstance(vulkan_instance_, nullptr);
     SDL_DestroyWindow(window_);

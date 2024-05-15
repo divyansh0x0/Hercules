@@ -31,7 +31,7 @@ vpath %.cpp $(dir $(SRC_FILES))
 
 $(OUT)/%.o: %.cpp
 	if not exist ..\$(notdir $(OUT)) (mkdir ..\$(notdir $(OUT))\) 
-	@echo CREATING .o FILES
+	@echo CREATING .o FILE $@
 	$(CXX) $(CFLAGS) -I. -c $< -o $@
 	
 

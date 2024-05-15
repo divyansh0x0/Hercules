@@ -4,6 +4,7 @@
 #include <chrono>
 #include <SDL2/SDL.h>
 #include <SDL2/SDL_vulkan.h>
+#include<stdexcept>
 
 #define WINDOW_NAME "Hercules"
 ///-----------------------------------------------------------------------------------------
@@ -47,10 +48,10 @@ SDL_Window *initAndGetSDLWindow(int width, int height)
 //------------------------------------------------------------------------------------------
 
     
-Engine::Engine(int width, int height)
+Engine::Engine(int width, int height) : renderer_()
 {
     window_ = initAndGetSDLWindow(width, height);
-    renderer_ = new Renderer(window_);
+    renderer_.set_window(window_);
 }
 Engine::~Engine()
 {
@@ -68,7 +69,7 @@ void Engine::HideWindow()
 void Engine::DestroyEngine()
 {
     is_engine_running = false;
-    delete renderer_;
+    // delete renderer_;
     SDL_DestroyWindow(window_);
     SDL_Vulkan_UnloadLibrary();
     SDL_Quit();
@@ -80,16 +81,17 @@ void Engine::Loop()
     using namespace std::chrono;
     auto start = high_resolution_clock::now();
     unsigned int dt = 0;
-    renderer_->Initialize();
+    bool is_initialized = renderer_.Initialize(true);
+    if(!is_initialized)
+        throw std::runtime_error("Vulkan renderer couldn't be initialized");
     while (is_engine_running)
     {
 
         doInput();
-        // SDL_UpdateWindowSurface(window);
         if (dt > 1000 / 60)
         {
             update(dt);
-           renderer_->Render();
+           renderer_.Render();
             auto end = high_resolution_clock::now();
             start = end;
         }
