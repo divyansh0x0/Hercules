@@ -7,64 +7,53 @@
 #include <vulkan/vulkan_core.h>
 #include <SDL2/SDL_syswm.h>
 #include <vulkan/vulkan_win32.h>
-#define VK_USE_PLATFORM_WIN32_KHR
-// #include <vulkan/vulkan_raii.hpp>
-// #ifdef NDEBUG
-// const bool enableValidationLayers = false;
-// #else
+#include <limits>
+#include <algorithm>
+#include <Engine/shader.h>
 const bool enableValidationLayers = true;
-// #endif
-// #define
-
-// #ifdef _WIN32
-// // #pragma comment(linker, "/subsystem:windows")
-// #define VK_USE_PLATFORM_WIN32_KHR
-// #define PLATFORM_SURFACE_EXTENSION_NAME VK_KHR_WIN32_SURFACE_EXTENSION_NAME
-// #endif
-
 #define ARRAY_LENGTH(arr) sizeof(arr) / sizeof(arr[0])
 
-bool enable_debug_logs = true;
-const VkApplicationInfo kAapplicationInfo = {
-    VK_STRUCTURE_TYPE_APPLICATION_INFO,
-    nullptr,
-    "Physics Engine",
-    VK_MAKE_VERSION(1, 0, 0),
-    "Hercules",
-    VK_MAKE_VERSION(1, 0, 0),
-    VK_API_VERSION_1_0
+// bool enable_debug_logs = true;
 
+struct SwapChainSupportDetails
+{
+    VkSurfaceCapabilitiesKHR capabilities;
+    std::vector<VkSurfaceFormatKHR> formats;
+    std::vector<VkPresentModeKHR> presentModes;
 };
-const std::vector<const char *> kRequiredDeviceExtensions = {
-    VK_KHR_SWAPCHAIN_EXTENSION_NAME};
-const char *kValidationLayers[] = {"VK_LAYER_KHRONOS_validation"};
+
+
+///-----------------------------------------------------------------------------------------
+//                                          Utility methods
+//------------------------------------------------------------------------------------------
 bool GPUHasAllFeatures(VkPhysicalDevice gpu)
 {
     VkPhysicalDeviceFeatures deviceFeatures;
     vkGetPhysicalDeviceFeatures(gpu, &deviceFeatures);
     return deviceFeatures.geometryShader;
 }
-struct QueueFamilyInfo
+SwapChainSupportDetails QuerySwapChainSupport(VkPhysicalDevice device, VkSurfaceKHR surface)
 {
-    bool are_all_queues_available;
-    //{GraphicsFamilyIndex, PresentFamilyIndex}
-    int indices[2] = {-1, -1};
-    uint32_t queue_count;
-};
-struct GPUData
-{
-    VkPhysicalDevice gpu;
-    std::string name;
-    std::string device_type;
-    QueueFamilyInfo queue_family_info;
-};
-///-----------------------------------------------------------------------------------------
-//                                          Utility methods
-//------------------------------------------------------------------------------------------
+    SwapChainSupportDetails details;
+    vkGetPhysicalDeviceSurfaceCapabilitiesKHR(device, surface, &details.capabilities);
+    uint32_t formatCount;
+    vkGetPhysicalDeviceSurfaceFormatsKHR(device, surface, &formatCount, nullptr);
 
-// bool initVulkanInstance(SDL_Window *window, VkInstance vulkan_instance)
-// {
-// }
+    if (formatCount != 0)
+    {
+        details.formats.resize(formatCount);
+        vkGetPhysicalDeviceSurfaceFormatsKHR(device, surface, &formatCount, details.formats.data());
+    }
+    uint32_t presentModeCount;
+    vkGetPhysicalDeviceSurfacePresentModesKHR(device, surface, &presentModeCount, nullptr);
+
+    if (presentModeCount != 0)
+    {
+        details.presentModes.resize(presentModeCount);
+        vkGetPhysicalDeviceSurfacePresentModesKHR(device, surface, &presentModeCount, details.presentModes.data());
+    }
+    return details;
+}
 bool checkValidationLayerSupport()
 {
     uint32_t layerCount;
@@ -131,6 +120,7 @@ std::vector<GPUData> GetSuitableGPUs(VkInstance vulkan_instance)
             {
                 GPUData gpu_info = {
                     device,
+                    VK_NULL_HANDLE,
                     std::string(device_properties.deviceName),
                     device_type};
                 suitable_devices_info.push_back(gpu_info);
@@ -194,56 +184,101 @@ bool AreExtensionsSupported(VkPhysicalDevice gpu)
 
     return extensions_found == kRequiredDeviceExtensions.size();
 }
-GPUData ChooseOneSuitableGPU(std::vector<GPUData> gpus, VkInstance vulkan_instance, VkSurfaceKHR vulkan_surface)
+GPUData GetOneSuitableGPU(std::vector<GPUData> gpus, VkInstance vulkan_instance, VkSurfaceKHR vulkan_surface)
 {
+    bool swapChainAdequate = false;
     for (GPUData gpu_info : gpus)
     {
-        QueueFamilyInfo gpu_queue_info = GetQueueFamilyInfo(gpu_info.gpu, vulkan_instance, vulkan_surface);
-        if (gpu_queue_info.are_all_queues_available && AreExtensionsSupported(gpu_info.gpu))
+        // Check for GPU suitablity by checking for required extensions, swap chain support and availablity of required queues
+        QueueFamilyInfo gpu_queue_info = GetQueueFamilyInfo(gpu_info.physical_device, vulkan_instance, vulkan_surface);
+        if (gpu_queue_info.are_all_queues_available && AreExtensionsSupported(gpu_info.physical_device))
         {
-            gpu_info.queue_family_info = gpu_queue_info;
-            return gpu_info;
+            SwapChainSupportDetails swapChainSupport = QuerySwapChainSupport(gpu_info.physical_device, vulkan_surface);
+            swapChainAdequate = !swapChainSupport.formats.empty() && !swapChainSupport.presentModes.empty();
+            if (swapChainAdequate)
+            {
+                gpu_info.queue_family_info = gpu_queue_info;
+                return gpu_info;
+            }
         }
     }
     logger::error("no suitable GPU found, returning first gpu");
     return gpus.at(0);
 }
-///-----------------------------------------------------------------------------------------
-//                                          Public methods
-//------------------------------------------------------------------------------------------
-
-Renderer::Renderer()
-{
-    logger::success("Renderer object created");
-}
-void Renderer::set_window(SDL_Window *window)
-{
-    this->window_ = window;
-    this->sdl_renderer_ = SDL_CreateRenderer(window, -1, 0);
-    if (sdl_renderer_ == nullptr)
-        logger::error(SDL_GetError());
-}
-bool Renderer::Initialize()
+VkPresentModeKHR GetSuitableSwapPresentMode(const std::vector<VkPresentModeKHR> &availablePresentModes)
 {
 
-    if (window_ == nullptr)
+    // VK_PRESENT_MODE_MAILBOX_KHR: Instead of blocking the application when the queue is full,
+    // the images that are already queued are simply replaced with the newer ones.
+    //  This mode can be used to render frames as fast as possible while still avoiding tearing,
+    // resulting in fewer latency issues than standard vertical sync.
+    for (const auto &availablePresentMode : availablePresentModes)
     {
-        logger::error("Call set_window() before initialization of renderer");
-        return false;
+        if (availablePresentMode == VK_PRESENT_MODE_MAILBOX_KHR)
+        {
+            return availablePresentMode;
+        }
     }
+    // Only the VK_PRESENT_MODE_FIFO_KHR mode is guaranteed to be available, so its the fallback mode
+
+    return VK_PRESENT_MODE_FIFO_KHR;
+}
+VkSurfaceFormatKHR GetSuitableSwapSurfaceFormat(const std::vector<VkSurfaceFormatKHR> &availableFormats)
+{
+    // Chooses SRGB color format
+    for (const auto &availableFormat : availableFormats)
+    {
+        if (availableFormat.format == VK_FORMAT_B8G8R8A8_SRGB && availableFormat.colorSpace == VK_COLOR_SPACE_SRGB_NONLINEAR_KHR)
+        {
+            return availableFormat;
+        }
+    }
+    // if SRGB is not available then return the first format
+    return availableFormats[0];
+}
+
+VkExtent2D GetSwapExtent(const VkSurfaceCapabilitiesKHR &capabilities, SDL_Window *window)
+{
+    if (capabilities.currentExtent.width == std::numeric_limits<uint32_t>::max())
+    {
+        int width, height;
+        SDL_Vulkan_GetDrawableSize(window, &width, &height);
+
+        VkExtent2D actualExtent = {
+            static_cast<uint32_t>(width),
+            static_cast<uint32_t>(height)};
+
+        actualExtent.width = std::clamp(actualExtent.width, capabilities.minImageExtent.width, capabilities.maxImageExtent.width);
+        actualExtent.height = std::clamp(actualExtent.height, capabilities.minImageExtent.height, capabilities.maxImageExtent.height);
+
+        return actualExtent;
+    }
+    return capabilities.currentExtent;
+}
+///-----------------------------------------------------------------------------------------
+//                                          Initializer methods
+//------------------------------------------------------------------------------------------
+/**
+ * Stores VkSwapchainKHR in gpu_info
+ */
+
+bool InitVulkanInstance(SDL_Window *window, VkInstance *vulkan_instance)
+{
 
     // initialize vulkanInstance variable
     logger::info("INITIALIZING RENDERER");
     unsigned int extension_count;
-    SDL_Vulkan_GetInstanceExtensions(window_, &extension_count, nullptr);
+    SDL_Vulkan_GetInstanceExtensions(window, &extension_count, nullptr);
     std::vector<const char *> extension_names(extension_count);
 
-    SDL_bool b1 = SDL_Vulkan_GetInstanceExtensions(window_, &extension_count, extension_names.data());
-    if (b1)
-        logger::success("Extension created successfully");
+    if (SDL_Vulkan_GetInstanceExtensions(window, &extension_count, extension_names.data()) == SDL_FALSE)
+    {
+        logger::error("Instance extensions could not be created: " + std::string(SDL_GetError()));
+    }
     if (extension_count == 0)
     {
-        logger::error("EXTENSION COUNT IS ZERO");
+        logger::error("No extensions are available");
+        return false;
     }
     else
     {
@@ -264,29 +299,22 @@ bool Renderer::Initialize()
         extension_count,                        // enabledExtensionCount
         extension_names.data()                  // ppEnabledExtensionNames
     };
-    VkResult instance_creation_code = vkCreateInstance(&vulkan_instance_info, nullptr, &vulkan_instance_);
-    if (instance_creation_code != VK_SUCCESS)
+    if (VkResult instance_creation_code = vkCreateInstance(&vulkan_instance_info, nullptr, vulkan_instance); instance_creation_code != VK_SUCCESS)
     {
-        logger::error("VULKAN INSTANCE CREATION FAILED! : " + getTranslatedErrorCode(instance_creation_code));
+        logger::error("Vulkan CreateInstance() failed: " + getTranslatedErrorCode(instance_creation_code));
         return false;
     }
-    logger::error(SDL_GetError());
-    logger::success("Vulkan instance inititialized successfully");
-    // VkSurfaceKHR vulkanSurface;
-    if (SDL_Vulkan_CreateSurface(window_, vulkan_instance_, &vulkan_surface_) == SDL_FALSE)
-    {
-        logger::error(SDL_GetError());
-    }
-    logger::success("Vulkan surface inititialized successfully");
-
+    return true;
+}
+GPUData CreateGPUData(VkInstance vulkan_instance, VkSurfaceKHR vulkan_surface)
+{
     // Finding a gpu with vulkan support
-    std::vector<GPUData> gpus = GetSuitableGPUs(vulkan_instance_);
+    std::vector<GPUData> gpus = GetSuitableGPUs(vulkan_instance);
+    GPUData suitable_gpu_info = GetOneSuitableGPU(gpus, vulkan_instance, vulkan_surface); // chosing first gpu as suitable gpus
     if (gpus.empty())
     {
         logger::error("No suitable GPU found for vulkan");
-        return false;
     }
-    GPUData suitable_gpu_info = ChooseOneSuitableGPU(gpus, vulkan_instance_, vulkan_surface_); // chosing first gpu as suitable gpus
     logger::info("Creating queue families");
     const float queue_priority_level = 1.0f;
     QueueFamilyInfo queue_family_info = suitable_gpu_info.queue_family_info;
@@ -321,25 +349,171 @@ bool Renderer::Initialize()
         static_cast<uint32_t>(queue_create_infos.size()),        // queueCreateInfoCount
         queue_create_infos.data(),                               // pQueueCreateInfos
         0,                                                       // enabledLayerCount
-        nullptr,                        // ppEnabledLayerNames
+        nullptr,                                                 // ppEnabledLayerNames
         static_cast<uint32_t>(kRequiredDeviceExtensions.size()), // enabledExtensionCount
-        kRequiredDeviceExtensions.data(),                                                 // ppEnabledExtensionNames
+        kRequiredDeviceExtensions.data(),                        // ppEnabledExtensionNames
         &deviceFeatures,                                         // pEnabledFeatures
     };
 
     // creates a device and stores it in global gpu_
-    VkResult device_creation_result = vkCreateDevice(suitable_gpu_info.gpu, &device_create_info, nullptr, &gpu_);
+    VkResult device_creation_result = vkCreateDevice(suitable_gpu_info.physical_device, &device_create_info, nullptr, &suitable_gpu_info.device);
     if (device_creation_result != VK_SUCCESS)
     {
         logger::error("DEVICE CREATION FAILED ERRORCODE: " + std::to_string(device_creation_result) + " | " + getTranslatedErrorCode(device_creation_result));
+    }
+
+    return suitable_gpu_info;
+}
+bool CreateSwapChainViews(GPUData gpu_data)
+{
+    VkImageViewCreateInfo create_info{VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO};
+
+    // The viewType parameter allows you to treat images as 1D textures, 2D textures, 3D textures and cube maps.
+    create_info.viewType = VK_IMAGE_VIEW_TYPE_2D;
+    create_info.format = gpu_data.swap_chain_data.image_format;
+    // The subresourceRange field describes what the image's purpose is and which part of the image should be accessed.
+    //  Our images will be used as color targets without any mipmapping levels or multiple layers.
+    create_info.components = VkComponentMapping{
+        VK_COMPONENT_SWIZZLE_IDENTITY, //  r
+        VK_COMPONENT_SWIZZLE_IDENTITY, // g
+        VK_COMPONENT_SWIZZLE_IDENTITY, // b
+        VK_COMPONENT_SWIZZLE_IDENTITY  // a
+    };
+
+    // The subresourceRange field describes what the image's purpose is and which part of the image should be accessed.
+    //  Our images will be used as color targets without any mipmapping levels or multiple layers.
+    // If you were working on a stereographic 3D application, then you would create a swap chain with multiple layers.
+    // You could then create multiple image views for each image representing the views for the left and right eyes by accessing different layers.
+    create_info.subresourceRange = VkImageSubresourceRange{
+        VK_IMAGE_ASPECT_COLOR_BIT, // aspectMask;
+        0,                         // baseMipLevel;
+        1,                         // levelCount;
+        0,                         // baseArrayLayer;
+        1                          // layerCount;
+    };
+    std::vector<VkImage> sc_images = gpu_data.swap_chain_data.images;
+    std::vector<VkImageView> sc_views = gpu_data.swap_chain_data.image_views;
+
+    for (size_t i = 0; i < gpu_data.swap_chain_data.images.size(); i++)
+    {
+        create_info.image = sc_images[i];
+        if (vkCreateImageView(gpu_data.device, &create_info, nullptr, &sc_views[i]) != VK_SUCCESS)
+        {
+            logger::error("Failed to create image view for image at index:" + std::to_string(i));
+            return false;
+        }
+    }
+    return true;
+}
+bool CreateSwapChain(GPUData gpu_data, SDL_Window *window, VkSurfaceKHR surface)
+{
+    SwapChainSupportDetails swap_chain_support = QuerySwapChainSupport(gpu_data.physical_device, surface);
+
+    VkSurfaceFormatKHR surface_format = GetSuitableSwapSurfaceFormat(swap_chain_support.formats);
+    VkPresentModeKHR present_mode = GetSuitableSwapPresentMode(swap_chain_support.presentModes);
+    VkExtent2D extent = GetSwapExtent(swap_chain_support.capabilities, window);
+
+    uint32_t imageCount = swap_chain_support.capabilities.minImageCount + 1;
+    if (swap_chain_support.capabilities.maxImageCount > 0 && imageCount > swap_chain_support.capabilities.maxImageCount)
+        imageCount = swap_chain_support.capabilities.maxImageCount;
+
+    VkSwapchainCreateInfoKHR createInfo{
+        VK_STRUCTURE_TYPE_SWAPCHAIN_CREATE_INFO_KHR,      // sType;
+        nullptr,                                          // pNext;
+        0,                                                // flags;
+        surface,                                          // surface;
+        imageCount,                                       // minImageCount;
+        surface_format.format,                            // imageFormat;
+        surface_format.colorSpace,                        // imageColorSpace;
+        extent,                                           // imageExtent;
+        1,                                                // imageArrayLayers;
+        VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT,              // imageUsage;
+        VK_SHARING_MODE_EXCLUSIVE,                        // imageSharingMode;
+        0,                                                // queueFamilyIndexCount;
+        nullptr,                                          // pQueueFamilyIndices;
+        swap_chain_support.capabilities.currentTransform, // preTransform;
+        VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR,                // compositeAlpha;
+        present_mode,                                     // presentMode;
+        VK_TRUE,                                          // clipped;
+        VK_NULL_HANDLE                                    // oldSwapchain;
+    };
+    gpu_data.swap_chain_data = SwapChainData{};
+    SwapChainData sc_data = gpu_data.swap_chain_data;
+    // save extent and image format
+    sc_data.extent = extent;
+    sc_data.image_format = surface_format.format;
+    // store swap chain
+    if (vkCreateSwapchainKHR(gpu_data.device, &createInfo, nullptr, &sc_data.swap_chain) != VK_SUCCESS)
+    {
         return false;
     }
-    logger::success("DEVICE CREATED SUCCESSFULLY");
+    // store VkImages in SwapChainData
+    vkGetSwapchainImagesKHR(gpu_data.device, sc_data.swap_chain, &imageCount, nullptr);
+    sc_data.images.resize(imageCount);
+    sc_data.image_views.resize(imageCount);
+    vkGetSwapchainImagesKHR(gpu_data.device, sc_data.swap_chain, &imageCount, sc_data.images.data());
 
+    return CreateSwapChainViews(gpu_data);
+}
+
+bool CreateGraphicsPipeline(){
+    std::vector<char> vertShaderCode = ReadShaderFile("shaders/vert.spv");
+    std::vector<char> fragShaderCode = ReadShaderFile("shaders/frag.spv");
+    return false;
+}
+
+///-----------------------------------------------------------------------------------------
+//                                          Public methods
+//------------------------------------------------------------------------------------------
+
+Renderer::Renderer()
+{
+    logger::success("Renderer object created");
+}
+
+bool Renderer::Initialize(SDL_Window *window)
+{
+    this->window_ = window;
+    this->sdl_renderer_ = SDL_CreateRenderer(window, -1, 0);
+
+    if (window_ == nullptr || sdl_renderer_ == nullptr)
+    {
+        logger::error(SDL_GetError());
+        return false;
+    }
+    // initialize vulkan
+    if (!InitVulkanInstance(window_, &vulkan_instance_))
+    {
+        logger::error("Vulkan initialization failed");
+        return false;
+    }
+    logger::success("Vulkan instance inititialized successfully");
+
+    // Create vulkan surface;
+    if (SDL_Vulkan_CreateSurface(window_, vulkan_instance_, &vulkan_surface_) == SDL_FALSE)
+    {
+        logger::error(SDL_GetError());
+    }
+    logger::success("Vulkan surface inititialized successfully");
+
+    // Create gpu data
+    gpu_data_ = CreateGPUData(vulkan_instance_, vulkan_surface_);
+
+    // Store logical device in gpu data
     VkQueue graphics_queue;
-    vkGetDeviceQueue(gpu_, queue_family_info.indices[0], 0, &graphics_queue);
+    vkGetDeviceQueue(gpu_data_.device, gpu_data_.queue_family_info.indices[0], 0, &graphics_queue);
     VkQueue present_queue;
-    vkGetDeviceQueue(gpu_, queue_family_info.indices[1], 0, &present_queue);
+    vkGetDeviceQueue(gpu_data_.device, gpu_data_.queue_family_info.indices[1], 0, &present_queue);
+
+    // Swap chains
+
+    if (!CreateSwapChain(gpu_data_, window_, vulkan_surface_))
+    {
+        logger::error("Failed to create swap chain!");
+        return false;
+    }
+    // logger::success("Swapchain created successfully");
+
     return true;
 }
 SDL_Rect my_rect = {0, 0, 100, 100};
@@ -360,7 +534,6 @@ void draw(SDL_Renderer *renderer, SDL_Rect *rect)
 }
 void Renderer::Render()
 {
-    // clear(sdl_renderer);
     i += 0.1;
     my_rect.x = static_cast<int>(i);
 
@@ -371,7 +544,12 @@ void Renderer::Render()
 Renderer::~Renderer()
 {
     logger::warn("Renderer destroyed");
-    vkDestroyDevice(gpu_, nullptr);
+    for (auto imageView : gpu_data_.swap_chain_data.image_views)
+    {
+        vkDestroyImageView(gpu_data_.device, imageView, nullptr);
+    }
+    vkDestroySwapchainKHR(gpu_data_.device, gpu_data_.swap_chain_data.swap_chain, nullptr);
+    vkDestroyDevice(gpu_data_.device, nullptr);
     vkDestroyInstance(vulkan_instance_, nullptr);
     SDL_DestroyWindow(window_);
     SDL_DestroyRenderer(sdl_renderer_);

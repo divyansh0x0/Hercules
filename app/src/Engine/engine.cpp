@@ -4,7 +4,7 @@
 #include <chrono>
 #include <SDL2/SDL.h>
 #include <SDL2/SDL_vulkan.h>
-#include<stdexcept>
+#include <stdexcept>
 
 #define WINDOW_NAME "Hercules"
 ///-----------------------------------------------------------------------------------------
@@ -25,7 +25,7 @@ SDL_Window *initAndGetSDLWindow(int width, int height)
      * Returns 0 on success or a negative error code on failure using SDL_GetError().
      */
     // SDL_Vulkan_LoadLibrary(nullotr)
-    window = SDL_CreateWindow(WINDOW_NAME, SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED, width, height, SDL_WINDOW_VULKAN | SDL_WINDOW_RESIZABLE | SDL_WINDOW_HIDDEN);
+    window = SDL_CreateWindow(WINDOW_NAME, SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED, width, height, SDL_WINDOW_VULKAN | SDL_WINDOW_HIDDEN);
     if (sdlInit != 0)
     {
         // fprintf(stderr, "SDL failed to initialise: %s\n", SDL_GetError());
@@ -47,11 +47,9 @@ SDL_Window *initAndGetSDLWindow(int width, int height)
 //                                          Public methods
 //------------------------------------------------------------------------------------------
 
-    
 Engine::Engine(int width, int height) : renderer_()
 {
     window_ = initAndGetSDLWindow(width, height);
-    renderer_.set_window(window_);
 }
 Engine::~Engine()
 {
@@ -81,17 +79,19 @@ void Engine::Loop()
     using namespace std::chrono;
     auto start = high_resolution_clock::now();
     unsigned int dt = 0;
-    bool is_initialized = renderer_.Initialize();
-    if(!is_initialized)
+    
+    bool is_renderer_initialized = renderer_.Initialize(window_);
+
+    if (!is_renderer_initialized)
         throw std::runtime_error("Vulkan renderer couldn't be initialized");
-    while (is_engine_running)
+    while (is_engine_running == true)
     {
 
         doInput();
         if (dt > 1000 / 60)
         {
             update(dt);
-           renderer_.Render();
+            renderer_.Render();
             auto end = high_resolution_clock::now();
             start = end;
         }

@@ -79,4 +79,13 @@
         "chrono": "cpp"
     },
     "makefile.makefilePath": "app/makefile",
+    "C_Cpp.autocompleteAddParentheses": true,
+    "C_Cpp.default.intelliSenseMode": "gcc-x64",
+    "C_Cpp.inlayHints.autoDeclarationTypes.showOnLeft": true,
+    "C_Cpp.inlayHints.parameterNames.enabled": true,
+    "C_Cpp.inlayHints.referenceOperator.enabled": true,
+    "C_Cpp.inlayHints.referenceOperator.showSpace": false,
+    "C_Cpp.intelliSenseEngineFallback": "enabled",
+    "C_Cpp.workspaceSymbols": "All",
+    "C_Cpp.workspaceParsingPriority": "low",
 }
