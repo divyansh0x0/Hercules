@@ -1,10 +1,7 @@
 #pragma once
-// #include <SDL2/SDL.h>
-#include "Engine/renderer.h"
-// #include <vulkan/vk_types.h>
-// #include <vk_initializers.h>
-struct SDL_Window;
-
+#include "Hercules/renderer.h"
+#include "Hercules/window.h"
+#include <string>
 #define VK_CHECK(x)                                                 \
 	do                                                              \
 	{                                                               \
@@ -20,15 +17,13 @@ struct SDL_Window;
 class Engine
 {
 private:
+    bool is_engine_running = false;
+    hercules::Window* window_;
     Renderer renderer_;
     void doInput();
 
 public:
-    SDL_Window *window_;
-    bool is_engine_running = false;
-    Engine(int width, int height);
-    void ShowWindow();
-    void HideWindow();
+    Engine(hercules::Window* window);
     void DestroyEngine();
     void Loop();
     ~Engine();

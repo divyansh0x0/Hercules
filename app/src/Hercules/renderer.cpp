@@ -1,7 +1,12 @@
-#include "Engine/renderer.h"
-#include "Engine/vulkanHelper.h"
-#include <SDL2/SDL_vulkan.h>
+#include "Hercules/renderer.h"
+#include "Hercules/vulkanHelper.h"
+#include "Hercules/shader.h"
+#include "Hercules/window.h"
 #include "logger.h"
+
+#include <iostream>
+
+#include <SDL2/SDL_vulkan.h>
 #include <string>
 #include <vector>
 #include <vulkan/vulkan_core.h>
@@ -9,7 +14,9 @@
 #include <vulkan/vulkan_win32.h>
 #include <limits>
 #include <algorithm>
-#include <Engine/shader.h>
+
+const char *kValidationLayers[] = {"VK_LAYER_KHRONOS_validation"};
+
 const bool enableValidationLayers = true;
 #define ARRAY_LENGTH(arr) sizeof(arr) / sizeof(arr[0])
 
@@ -22,17 +29,16 @@ struct SwapChainSupportDetails
     std::vector<VkPresentModeKHR> presentModes;
 };
 
-
 ///-----------------------------------------------------------------------------------------
 //                                          Utility methods
 //------------------------------------------------------------------------------------------
-bool GPUHasAllFeatures(VkPhysicalDevice gpu)
+bool GPUHasAllFeatures(VkPhysicalDevice &gpu)
 {
     VkPhysicalDeviceFeatures deviceFeatures;
     vkGetPhysicalDeviceFeatures(gpu, &deviceFeatures);
     return deviceFeatures.geometryShader;
 }
-SwapChainSupportDetails QuerySwapChainSupport(VkPhysicalDevice device, VkSurfaceKHR surface)
+SwapChainSupportDetails QuerySwapChainSupport(VkPhysicalDevice &device, VkSurfaceKHR &surface)
 {
     SwapChainSupportDetails details;
     vkGetPhysicalDeviceSurfaceCapabilitiesKHR(device, surface, &details.capabilities);
@@ -85,7 +91,7 @@ bool checkValidationLayerSupport()
 
     return true;
 }
-std::vector<GPUData> GetSuitableGPUs(VkInstance vulkan_instance)
+std::vector<GPUData> GetSuitableGPUs(VkInstance &vulkan_instance)
 {
 
     uint32_t physical_device_count;
@@ -130,7 +136,7 @@ std::vector<GPUData> GetSuitableGPUs(VkInstance vulkan_instance)
     return suitable_devices_info;
 }
 
-QueueFamilyInfo GetQueueFamilyInfo(VkPhysicalDevice gpu, VkInstance vulkan_instance, VkSurfaceKHR surface)
+QueueFamilyInfo GetQueueFamilyInfo(VkPhysicalDevice &gpu, VkInstance &vulkan_instance, VkSurfaceKHR &surface)
 {
     uint32_t queue_family_count;
     vkGetPhysicalDeviceQueueFamilyProperties(gpu, &queue_family_count, nullptr);
@@ -159,7 +165,7 @@ QueueFamilyInfo GetQueueFamilyInfo(VkPhysicalDevice gpu, VkInstance vulkan_insta
     }
     return queue_family_info;
 }
-bool AreExtensionsSupported(VkPhysicalDevice gpu)
+bool AreExtensionsSupported(VkPhysicalDevice &gpu)
 {
     // VkPhysicalDevice_T sl{};
     uint32_t extensionCount;
@@ -184,7 +190,7 @@ bool AreExtensionsSupported(VkPhysicalDevice gpu)
 
     return extensions_found == kRequiredDeviceExtensions.size();
 }
-GPUData GetOneSuitableGPU(std::vector<GPUData> gpus, VkInstance vulkan_instance, VkSurfaceKHR vulkan_surface)
+GPUData GetOneSuitableGPU(std::vector<GPUData> &gpus, VkInstance &vulkan_instance, VkSurfaceKHR &vulkan_surface)
 {
     bool swapChainAdequate = false;
     for (GPUData gpu_info : gpus)
@@ -262,11 +268,9 @@ VkExtent2D GetSwapExtent(const VkSurfaceCapabilitiesKHR &capabilities, SDL_Windo
  * Stores VkSwapchainKHR in gpu_info
  */
 
-bool InitVulkanInstance(SDL_Window *window, VkInstance *vulkan_instance)
+bool InitVulkanInstance(SDL_Window *window, VkInstance &vulkan_instance)
 {
-
-    // initialize vulkanInstance variable
-    logger::info("INITIALIZING RENDERER");
+    logger::info("Initializing vulkan: ");
     unsigned int extension_count;
     SDL_Vulkan_GetInstanceExtensions(window, &extension_count, nullptr);
     std::vector<const char *> extension_names(extension_count);
@@ -299,14 +303,14 @@ bool InitVulkanInstance(SDL_Window *window, VkInstance *vulkan_instance)
         extension_count,                        // enabledExtensionCount
         extension_names.data()                  // ppEnabledExtensionNames
     };
-    if (VkResult instance_creation_code = vkCreateInstance(&vulkan_instance_info, nullptr, vulkan_instance); instance_creation_code != VK_SUCCESS)
+    if (VkResult instance_creation_code = vkCreateInstance(&vulkan_instance_info, nullptr, &vulkan_instance); instance_creation_code != VK_SUCCESS)
     {
         logger::error("Vulkan CreateInstance() failed: " + getTranslatedErrorCode(instance_creation_code));
         return false;
     }
     return true;
 }
-GPUData CreateGPUData(VkInstance vulkan_instance, VkSurfaceKHR vulkan_surface)
+GPUData CreateGPUData(VkInstance &vulkan_instance, VkSurfaceKHR &vulkan_surface)
 {
     // Finding a gpu with vulkan support
     std::vector<GPUData> gpus = GetSuitableGPUs(vulkan_instance);
@@ -405,7 +409,7 @@ bool CreateSwapChainViews(GPUData gpu_data)
     }
     return true;
 }
-bool CreateSwapChain(GPUData gpu_data, SDL_Window *window, VkSurfaceKHR surface)
+bool CreateSwapChain(GPUData &gpu_data, SDL_Window *window, VkSurfaceKHR &surface)
 {
     SwapChainSupportDetails swap_chain_support = QuerySwapChainSupport(gpu_data.physical_device, surface);
 
@@ -437,7 +441,6 @@ bool CreateSwapChain(GPUData gpu_data, SDL_Window *window, VkSurfaceKHR surface)
         VK_TRUE,                                          // clipped;
         VK_NULL_HANDLE                                    // oldSwapchain;
     };
-    gpu_data.swap_chain_data = SwapChainData{};
     SwapChainData sc_data = gpu_data.swap_chain_data;
     // save extent and image format
     sc_data.extent = extent;
@@ -456,10 +459,188 @@ bool CreateSwapChain(GPUData gpu_data, SDL_Window *window, VkSurfaceKHR surface)
     return CreateSwapChainViews(gpu_data);
 }
 
-bool CreateGraphicsPipeline(){
-    std::vector<char> vertShaderCode = ReadShaderFile("shaders/vert.spv");
-    std::vector<char> fragShaderCode = ReadShaderFile("shaders/frag.spv");
-    return false;
+VkPipelineLayout CreateGraphicsPipeline(GPUData &gpu_data)
+{
+    VkShaderModule vert_shader_module = CreateShaderModule("shaders/vert.spv", gpu_data.device);
+    VkShaderModule frag_shader_module = CreateShaderModule("shaders/frag.spv", gpu_data.device);
+
+    // The pName and pSpecializationInfo; specify the shader module containing the code, and the function to invoke, known as the entrypoint.
+    // That means that it's possible to combine multiple fragment shaders into a single shader module and use
+    // different entry points to differentiate between their behaviors. In this case we'll stick to the standard main, however.
+
+    // flags: is a bitmask of VkPipelineShaderStageCreateFlagBits specifying how the pipeline shader stage will be generated.
+    // stage: is a VkShaderStageFlagBits value specifying a single pipeline stage.
+    // module: is optionally a VkShaderModule object containing the shader code for this stage.
+    // pName: is a pointer to a null-terminated UTF-8 string specifying the entry point name of the shader for this stage.
+    // pSpecializationInfo: is a pointer to a VkSpecializationInfo structure, as described in Specialization Constants, or NULL.
+    VkPipelineShaderStageCreateInfo vert_shader_stage_info{
+        VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO, // sType;
+        nullptr,                                             // pNext;
+        0,                                                   // flags;
+        VK_SHADER_STAGE_VERTEX_BIT,                          // stage;
+        vert_shader_module,                                  // module;
+        "main",                                              // pName;
+        nullptr                                              // pSpecializationInfo;
+    };
+    VkPipelineShaderStageCreateInfo frag_shader_stage_info{
+        VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO, // sType;
+        nullptr,                                             // pNext;
+        0,                                                   // flags;
+        VK_SHADER_STAGE_FRAGMENT_BIT,                        // stage;
+        frag_shader_module,                                  // module;
+        "main",                                              // pName;
+        nullptr                                              // pSpecializationInfo;
+    };
+    VkPipelineDynamicStateCreateInfo dynamic_state_create_info{
+        VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO, // sType
+        nullptr,                                              // pNext
+        0,                                                    // flags
+        static_cast<uint32_t>(kDynamicStates.size()),         // dynamicStateCount
+        kDynamicStates.data()                                 // pDynamicStates
+    };
+    VkPipelineVertexInputStateCreateInfo vertex_input_info{
+        VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO, // sType
+        nullptr,                                                   // pNext
+        0,                                                         // flags
+        0,                                                         // vertexBindingDescriptionCount
+        nullptr,                                                   // pVertexBindingDescriptions
+        0,                                                         // vertexAttributeDescriptionCount
+        nullptr                                                    // pVertexAttributeDescriptions
+
+    };
+    //    VK_PRIMITIVE_TOPOLOGY_POINT_LIST: points from vertices
+    // VK_PRIMITIVE_TOPOLOGY_LINE_LIST: line from every 2 vertices without reuse
+    // VK_PRIMITIVE_TOPOLOGY_LINE_STRIP: the end vertex of every line is used as start vertex for the next line
+    // VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST: triangle from every 3 vertices without reuse
+    // VK_PRIMITIVE_TOPOLOGY_TRIANGLE_STRIP: the second and third vertex of every triangle are used as first two vertices of the next triangle
+
+    // If the primitiveRestartEnable member is set to VK_TRUE, then it's possible to break up lines and triangles in the
+    // VK_PRIMITIVE_TOPOLOGY_LINE_STRIP topology modes by using a special index of 0xFFFF or 0xFFFFFFFF.
+    VkPipelineInputAssemblyStateCreateInfo inputAssembly{
+        VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO, // sType
+        nullptr,                                                     // pNext
+        0,                                                           // flags
+        VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST,                         // topology
+        VK_FALSE,                                                    // primitiveRestartEnable
+    };
+    inputAssembly.sType = VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO;
+    inputAssembly.topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
+    inputAssembly.primitiveRestartEnable = VK_FALSE;
+    VkPipelineShaderStageCreateInfo shaderStages[] = {vert_shader_stage_info, frag_shader_stage_info};
+    // A viewport basically describes the region of the framebuffer that the output will be rendered to
+    VkViewport viewport{
+        0.0f,                                          // x
+        0.0f,                                          // y
+        (float)gpu_data.swap_chain_data.extent.width,  // width
+        (float)gpu_data.swap_chain_data.extent.height, // height
+        0.0f,                                          // minDepth
+        1.0f,                                          // maxDepth
+    };
+    VkRect2D scissor_rect{
+        {0, 0},                         // offset VkOffset2D
+        gpu_data.swap_chain_data.extent // extent VkExtent2D
+    };
+    // The actual viewport(s) and scissor rectangle(s) will then later be set up at drawing time.
+    VkPipelineViewportStateCreateInfo viewport_state_create_info{
+        VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO, // sType
+        nullptr,                                               // pNext
+        0,                                                     // flags
+        1,                                                     // viewportCount
+        nullptr,                                               // pViewports
+        1,                                                     // scissorCount
+        nullptr,                                               // pScissors
+    };
+
+    // The polygonMode determines how fragments are generated for geometry. The following modes are available:
+    //  VK_POLYGON_MODE_FILL: fill the area of the polygon with fragments
+    //  VK_POLYGON_MODE_LINE: polygon edges are drawn as lines
+    //  VK_POLYGON_MODE_POINT: polygon vertices are drawn as points
+    //  Using any mode other than fill requires enabling a GPU feature.
+    VkPipelineRasterizationStateCreateInfo rasterizer{
+        VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO, // sType;
+        nullptr,                                                    // pNext;
+        0,                                                          // flags;
+        VK_FALSE,                                                   // depthClampEnable;
+        VK_FALSE,                                                   // rasterizerDiscardEnable;
+        VK_POLYGON_MODE_FILL,                                       // polygonMode;
+        VK_CULL_MODE_BACK_BIT,                                      // cullMode;
+        VK_FRONT_FACE_CLOCKWISE,                                    // frontFace;
+        VK_FALSE,                                                   // depthBiasEnable;
+        0.0f,                                                       // depthBiasConstantFactor;
+        0.0f,                                                       // depthBiasClamp;
+        0.0f,                                                       // depthBiasSlopeFactor;
+        1.0f,                                                       // lineWidth;
+    };
+    // While viewports define the transformation from the image to the framebuffer,
+    //  scissor rectangles define in which regions pixels will actually be stored.
+    // Any pixels outside the scissor rectangles will be discarded by the rasterizer
+
+    VkPipelineMultisampleStateCreateInfo multisampling{
+        VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO, // sType;
+        nullptr,                                                  // pNext;
+        0,                                                        // flags;
+        VK_SAMPLE_COUNT_1_BIT,                                    // rasterizationSamples;
+        VK_FALSE,                                                 // sampleShadingEnable;
+        1.0f,                                                     // minSampleShading;
+        nullptr,                                                  // pSampleMask;
+        VK_FALSE,                                                 // alphaToCoverageEnable;
+        VK_FALSE,                                                 // alphaToOneEnable;
+    };
+    VkPipelineColorBlendAttachmentState colorblend_attachement{
+        VK_FALSE,                                                                                                 // blendEnable;
+        VK_BLEND_FACTOR_SRC_ALPHA,                                                                                // srcColorBlendFactor;
+        VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA,                                                                      // dstColorBlendFactor;
+        VK_BLEND_OP_ADD,                                                                                          // colorBlendOp;
+        VK_BLEND_FACTOR_ONE,                                                                                      // srcAlphaBlendFactor;
+        VK_BLEND_FACTOR_ZERO,                                                                                     // dstAlphaBlendFactor;
+        VK_BLEND_OP_ADD,                                                                                          // alphaBlendOp;
+        VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT | VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT // colorWriteMask;
+    };
+    VkPipelineColorBlendStateCreateInfo color_blending{
+        VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO, // sType;
+        nullptr,                                                  // pNext;
+        0,                                                        // flags;
+        VK_FALSE,                                                 // logicOpEnable;
+        VK_LOGIC_OP_COPY,                                         // logicOp;
+        1,                                                        // attachmentCount;
+        &colorblend_attachement,                                  // pAttachments;
+        {0.0f, 0.0f, 0.0f, 0.0f},                                 // blendConstants[4];
+    };
+
+    VkPipelineLayoutCreateInfo pipeline_layout_create_info{
+        VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO, // sType;
+        nullptr,                                       // pNext;
+        0,                                             // flags;
+        0,                                             // setLayoutCount;
+        nullptr,                                       // pSetLayouts;
+        0,                                             // pushConstantRangeCount;
+        nullptr,                                       // pPushConstantRanges;
+    };
+
+    VkPipelineLayout pipeline_layout;
+    if (vkCreatePipelineLayout(gpu_data.device, &pipeline_layout_create_info, nullptr, &pipeline_layout) != VK_SUCCESS)
+    {
+        throw std::runtime_error("failed to create pipeline layout!");
+    }
+    return pipeline_layout;
+}
+
+void CreateRenderPass(GPUData &gpu_data)
+{
+    // VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL: Images used as color attachment
+    // VK_IMAGE_LAYOUT_PRESENT_SRC_KHR: Images to be presented in the swap chain
+    // VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL: Images to be used as destination for a memory copy operation
+    VkAttachmentDescription color_attachement{
+        0,                                     // flags;
+        gpu_data.swap_chain_data.image_format, // format;
+        VK_SAMPLE_COUNT_1_BIT,                 // samples;
+        VK_ATTACHMENT_LOAD_OP_CLEAR,           // loadOp;
+        VK_ATTACHMENT_STORE_OP_STORE,          // storeOp;
+        VK_ATTACHMENT_LOAD_OP_DONT_CARE,       // stencilLoadOp;
+        VK_ATTACHMENT_STORE_OP_DONT_CARE,      // stencilStoreOp;
+        VK_IMAGE_LAYOUT_UNDEFINED,             // initialLayout;
+        VK_IMAGE_LAYOUT_PRESENT_SRC_KHR,       // finalLayout;
+    };
 }
 
 ///-----------------------------------------------------------------------------------------
@@ -473,16 +654,9 @@ Renderer::Renderer()
 
 bool Renderer::Initialize(SDL_Window *window)
 {
-    this->window_ = window;
-    this->sdl_renderer_ = SDL_CreateRenderer(window, -1, 0);
 
-    if (window_ == nullptr || sdl_renderer_ == nullptr)
-    {
-        logger::error(SDL_GetError());
-        return false;
-    }
     // initialize vulkan
-    if (!InitVulkanInstance(window_, &vulkan_instance_))
+    if (!InitVulkanInstance(window, vulkan_instance_))
     {
         logger::error("Vulkan initialization failed");
         return false;
@@ -490,7 +664,7 @@ bool Renderer::Initialize(SDL_Window *window)
     logger::success("Vulkan instance inititialized successfully");
 
     // Create vulkan surface;
-    if (SDL_Vulkan_CreateSurface(window_, vulkan_instance_, &vulkan_surface_) == SDL_FALSE)
+    if (SDL_Vulkan_CreateSurface(window, vulkan_instance_, &vulkan_surface_) == SDL_FALSE)
     {
         logger::error(SDL_GetError());
     }
@@ -507,13 +681,14 @@ bool Renderer::Initialize(SDL_Window *window)
 
     // Swap chains
 
-    if (!CreateSwapChain(gpu_data_, window_, vulkan_surface_))
+    if (!CreateSwapChain(gpu_data_, window, vulkan_surface_))
     {
         logger::error("Failed to create swap chain!");
         return false;
     }
-    // logger::success("Swapchain created successfully");
+    logger::success("Swap chain created successfully");
 
+    pipeline_data_.pipeline_layout = CreateGraphicsPipeline(gpu_data_);
     return true;
 }
 SDL_Rect my_rect = {0, 0, 100, 100};
@@ -534,11 +709,6 @@ void draw(SDL_Renderer *renderer, SDL_Rect *rect)
 }
 void Renderer::Render()
 {
-    i += 0.1;
-    my_rect.x = static_cast<int>(i);
-
-    clear(sdl_renderer_);
-    draw(sdl_renderer_, &my_rect);
 }
 
 Renderer::~Renderer()
@@ -551,6 +721,6 @@ Renderer::~Renderer()
     vkDestroySwapchainKHR(gpu_data_.device, gpu_data_.swap_chain_data.swap_chain, nullptr);
     vkDestroyDevice(gpu_data_.device, nullptr);
     vkDestroyInstance(vulkan_instance_, nullptr);
-    SDL_DestroyWindow(window_);
-    SDL_DestroyRenderer(sdl_renderer_);
+    // vkDestroyShaderModule()
+    // vkDestroyPipelineLayout(device, pipelineLayout, nullptr);
 }

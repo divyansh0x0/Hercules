@@ -3,7 +3,7 @@
 
 OUT := ../out
 #lists all .c files in src directory
-SRC_FILES := $(wildcard src/*.cpp) $(wildcard src/Engine/*.cpp)
+SRC_FILES := $(wildcard src/*.cpp) $(wildcard src/Hercules/*.cpp)
 #$(VARIABLE:OLD_SUFFIX=NEW_SUFFIX) changes extension of all .c files to .o
 #creates object file names from .c file names and stores
 O_FILES = $(addprefix $(OUT)/,$(notdir $(SRC_FILES:.cpp=.o)))  
@@ -66,6 +66,7 @@ $(OUT)/%.o: %.cpp
 
 #build exe
 $(NAME) : $(O_FILES)
+	@echo $(O_FILES)
 	$(CXX) -o $(NAME) $(addprefix $(OUT)/,$(notdir $(O_FILES))) $(LIBS_FLAGS) $(LINKER_FLAGS)
 
 
