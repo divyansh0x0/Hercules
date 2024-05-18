@@ -2,16 +2,6 @@
 #include "Hercules/renderer.h"
 #include "Hercules/window.h"
 #include <string>
-#define VK_CHECK(x)                                                 \
-	do                                                              \
-	{                                                               \
-		VkResult err = x;                                           \
-		if (err)                                                    \
-		{                                                           \
-			std::cout <<"Detected Vulkan error: " << err << std::endl; \
-			abort();                                                \
-		}                                                           \
-	} while (0)
 
 
 class Engine

@@ -63,6 +63,7 @@ private:
     PipelineData pipeline_data_;
     VkSurfaceKHR vulkan_surface_;
     SwapChainData swapchain_data_;
+    VkDebugUtilsMessengerEXT debug_messenger_;
     void CreateVulkanSurfaceAndInstance(SDL_Window* window);
     void CreateGPUData();
     void CreateSwapChainData(SDL_Window* window);

@@ -15,10 +15,20 @@
 #include <limits>
 #include <algorithm>
 
-const char *kValidationLayers[] = {"VK_LAYER_KHRONOS_validation"};
+const std::vector<const char *> kValidationLayers = {"VK_LAYER_KHRONOS_validation"};
 
 const bool enableValidationLayers = true;
 #define ARRAY_LENGTH(arr) sizeof(arr) / sizeof(arr[0])
+#define VK_CHECK(x)                                                                             \
+    do                                                                                          \
+    {                                                                                           \
+        VkResult err = x;                                                                       \
+        if (err)                                                                                \
+        {                                                                                       \
+            std::cout << "Detected Vulkan error: " << getTranslatedErrorCode(err) << std::endl; \
+            abort();                                                                            \
+        }                                                                                       \
+    } while (0)
 
 // bool enable_debug_logs = true;
 
@@ -32,6 +42,88 @@ struct SwapChainSupportDetails
 ///-----------------------------------------------------------------------------------------
 //                                          Utility methods
 //------------------------------------------------------------------------------------------
+bool checkValidationLayerSupport()
+{
+    uint32_t layerCount;
+    vkEnumerateInstanceLayerProperties(&layerCount, nullptr);
+
+    std::vector<VkLayerProperties> availableLayers(layerCount);
+    vkEnumerateInstanceLayerProperties(&layerCount, availableLayers.data());
+
+    for (const char *layerName : kValidationLayers)
+    {
+        bool layerFound = false;
+
+        for (const auto &layerProperties : availableLayers)
+        {
+            if (strcmp(layerName, layerProperties.layerName) == 0)
+            {
+                layerFound = true;
+                break;
+            }
+        }
+
+        if (!layerFound)
+        {
+            return false;
+        }
+    }
+
+    return true;
+}
+static VKAPI_ATTR VkBool32 VKAPI_CALL debugCallback(VkDebugUtilsMessageSeverityFlagBitsEXT messageSeverity, VkDebugUtilsMessageTypeFlagsEXT messageType, const VkDebugUtilsMessengerCallbackDataEXT *pCallbackData, void *pUserData)
+{
+
+    switch (messageSeverity)
+    {
+    case VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT:
+        logger::warn("[VALIDATION LAYER] (WARNING) | " + std::string(pCallbackData->pMessage));
+        break;
+    case VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT:
+        logger::error("[VALIDATION LAYER] (ERROR)   | " + std::string(pCallbackData->pMessage));
+
+    default:
+        logger::info("[VALIDATION LAYER] (GENERAL) | " + std::string(pCallbackData->pMessage));
+        break;
+    }
+
+    return VK_FALSE;
+}
+VkDebugUtilsMessengerCreateInfoEXT GetDebugMessengerCreateInfo()
+{
+    return VkDebugUtilsMessengerCreateInfoEXT{
+        VK_STRUCTURE_TYPE_DEBUG_UTILS_MESSENGER_CREATE_INFO_EXT,                                                                                           // sType;
+        nullptr,                                                                                                                                           // pNext;
+        0,                                                                                                                                                 // flags;
+        VK_DEBUG_UTILS_MESSAGE_SEVERITY_VERBOSE_BIT_EXT | VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT | VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT, // messageSeverity;
+        VK_DEBUG_UTILS_MESSAGE_TYPE_GENERAL_BIT_EXT | VK_DEBUG_UTILS_MESSAGE_TYPE_VALIDATION_BIT_EXT | VK_DEBUG_UTILS_MESSAGE_TYPE_PERFORMANCE_BIT_EXT,    // messageType;
+        debugCallback,                                                                                                                                     // pfnUserCallback;
+        nullptr,                                                                                                                                           // pUserData;
+
+    };
+}
+
+VkResult CreateDebugUtilsMessengerEXT(VkInstance instance, const VkDebugUtilsMessengerCreateInfoEXT *pCreateInfo, const VkAllocationCallbacks *pAllocator, VkDebugUtilsMessengerEXT *pDebugMessenger)
+{
+    auto func = (PFN_vkCreateDebugUtilsMessengerEXT)vkGetInstanceProcAddr(instance, "vkCreateDebugUtilsMessengerEXT");
+    if (func != nullptr)
+    {
+        return func(instance, pCreateInfo, pAllocator, pDebugMessenger);
+    }
+    else
+    {
+        return VK_ERROR_EXTENSION_NOT_PRESENT;
+    }
+}
+
+void DestroyDebugUtilsMessengerEXT(VkInstance instance, VkDebugUtilsMessengerEXT debugMessenger, const VkAllocationCallbacks *pAllocator)
+{
+    auto func = (PFN_vkDestroyDebugUtilsMessengerEXT)vkGetInstanceProcAddr(instance, "vkDestroyDebugUtilsMessengerEXT");
+    if (func != nullptr)
+    {
+        func(instance, debugMessenger, pAllocator);
+    }
+}
 bool AreExtensionsSupported(VkPhysicalDevice &gpu)
 {
     // VkPhysicalDevice_T sl{};
@@ -76,7 +168,7 @@ QueueFamilyInfo GetQueueFamilyInfo(VkPhysicalDevice &gpu, VkInstance &vulkan_ins
             queue_family_info.indices[0] = i;
         }
         VkBool32 is_present_available = false;
-        vkGetPhysicalDeviceSurfaceSupportKHR(gpu, i, surface, &is_present_available);
+        VK_CHECK(vkGetPhysicalDeviceSurfaceSupportKHR(gpu, i, surface, &is_present_available));
         if (is_present_available)
             queue_family_info.indices[1] = i;
         queue_family_info.are_all_queues_available = is_graphics_family_available && is_present_available;
@@ -113,37 +205,6 @@ SwapChainSupportDetails QuerySwapChainSupport(VkPhysicalDevice &device, VkSurfac
         vkGetPhysicalDeviceSurfacePresentModesKHR(device, surface, &presentModeCount, details.presentModes.data());
     }
     return details;
-}
-bool checkValidationLayerSupport()
-{
-    uint32_t layerCount;
-    vkEnumerateInstanceLayerProperties(&layerCount, nullptr);
-
-    std::vector<VkLayerProperties> availableLayers(layerCount);
-    vkEnumerateInstanceLayerProperties(&layerCount, availableLayers.data());
-
-    for (const char *layerName : kValidationLayers)
-    {
-        bool layerFound = false;
-
-        logger::info("DEBUG LAYERS FOUND:");
-        for (VkLayerProperties layerProperties : availableLayers)
-        {
-            logger::info("\t" + std::string(layerProperties.layerName));
-            if (strcmp(layerName, layerProperties.layerName) == 0)
-            {
-                layerFound = true;
-                break;
-            }
-        }
-
-        if (!layerFound)
-        {
-            return false;
-        }
-    }
-
-    return true;
 }
 void GetSuitableGPUs(VkInstance &vulkan_instance, std::vector<GPUData> &suitable_devices_info)
 {
@@ -329,49 +390,58 @@ Renderer::Renderer()
 }
 void Renderer::CreateVulkanSurfaceAndInstance(SDL_Window *window)
 {
+    if (enableValidationLayers && !checkValidationLayerSupport())
+    {
+        throw std::runtime_error("validation layers requested, but not available!");
+    }
     logger::info("Initializing vulkan: ");
     unsigned int extension_count;
     SDL_Vulkan_GetInstanceExtensions(window, &extension_count, nullptr);
     std::vector<const char *> extension_names(extension_count);
 
     if (SDL_Vulkan_GetInstanceExtensions(window, &extension_count, extension_names.data()) == SDL_FALSE)
-    {
         throw std::runtime_error("Instance extensions could not be created: " + std::string(SDL_GetError()));
-    }
     if (extension_count == 0)
-    {
         throw std::runtime_error("No extensions are available");
-    }
-    else
-    {
-        logger::info("Available vulkan extensions:");
 
-        for (const char *extension : extension_names)
-        {
-            logger::info("\t" + std::string(extension));
-        }
+    if (enableValidationLayers)
+        extension_names.push_back(VK_EXT_DEBUG_UTILS_EXTENSION_NAME);
+    logger::info("Activating following vulkan extensions:");
+    for (const char *extension : extension_names)
+    {
+        logger::info("\t" + std::string(extension));
     }
+
     VkInstanceCreateInfo vulkan_instance_info = {
-        VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO, // sType
-        nullptr,                                // pNext
-        0,                                      // flags
-        &kAapplicationInfo,                     // pApplicationInfo
-        0,                                      // enabledLayerCount
-        nullptr,                                // ppEnabledLayerNames
-        extension_count,                        // enabledExtensionCount
-        extension_names.data()                  // ppEnabledExtensionNames
+        VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO,        // sType
+        nullptr,                                       // pNext
+        0,                                             // flags
+        &kAapplicationInfo,                            // pApplicationInfo
+        0,                                             // enabledLayerCount
+        nullptr,                                       // ppEnabledLayerNames
+        static_cast<uint32_t>(extension_names.size()), // enabledExtensionCount
+        extension_names.data()                         // ppEnabledExtensionNames
     };
-    if (VkResult instance_creation_code = vkCreateInstance(&vulkan_instance_info, nullptr, &this->vulkan_instance_); instance_creation_code != VK_SUCCESS)
+    VkDebugUtilsMessengerCreateInfoEXT debug_messenger_create_info = GetDebugMessengerCreateInfo();
+    if (enableValidationLayers)
     {
-        throw std::runtime_error("Vulkan CreateInstance() failed: " + getTranslatedErrorCode(instance_creation_code));
+        vulkan_instance_info.pNext = &debug_messenger_create_info;
+        vulkan_instance_info.enabledLayerCount = kValidationLayers.size();
+        vulkan_instance_info.ppEnabledLayerNames = kValidationLayers.data();
     }
 
+    VK_CHECK(vkCreateInstance(&vulkan_instance_info, nullptr, &this->vulkan_instance_));
+
+    if (enableValidationLayers)
+    {
+        VK_CHECK(CreateDebugUtilsMessengerEXT(vulkan_instance_, &debug_messenger_create_info, nullptr, &debug_messenger_));
+    }
     logger::success("Vulkan instance inititialized successfully");
 
     // Create vulkan surface;
     if (SDL_Vulkan_CreateSurface(window, this->vulkan_instance_, &this->vulkan_surface_) == SDL_FALSE)
     {
-        logger::error(SDL_GetError());
+        throw std::runtime_error(SDL_GetError());
     }
     logger::success("Vulkan surface inititialized successfully");
 }
@@ -507,8 +577,8 @@ void Renderer::CreateSwapChainData(SDL_Window *window)
         0,                         // baseArrayLayer;
         1                          // layerCount;
     };
-    std::vector<VkImage>* sc_images = &this->swapchain_data_.images;
-    std::vector<VkImageView>* sc_views = &this->swapchain_data_.image_views;
+    std::vector<VkImage> *sc_images = &this->swapchain_data_.images;
+    std::vector<VkImageView> *sc_views = &this->swapchain_data_.image_views;
 
     for (size_t i = 0; i < this->swapchain_data_.images.size(); i++)
     {
@@ -518,7 +588,6 @@ void Renderer::CreateSwapChainData(SDL_Window *window)
             throw std::runtime_error("Failed to create image view for image at index:" + std::to_string(i));
         }
     }
-
 }
 void Renderer::CreatePipelineData()
 {
@@ -720,8 +789,9 @@ void Renderer::CreatePipelineData()
     this->pipeline_data_.vert_shader_modules = {vert_shader_module};
     this->pipeline_data_.frag_shader_modules = {frag_shader_module};
 }
-void Renderer::CreateFramebuffers(){
-    
+void Renderer::CreateFramebuffers()
+{
+
     std::vector<VkFramebuffer> *framebuffers = &this->swapchain_data_.framebuffers;
 
     this->swapchain_data_.framebuffers.resize(this->swapchain_data_.image_views.size());
@@ -745,6 +815,7 @@ void Renderer::CreateFramebuffers(){
         }
     }
 }
+
 bool Renderer::Initialize(SDL_Window *window)
 {
 
@@ -776,6 +847,11 @@ void draw(SDL_Renderer *renderer, SDL_Rect *rect)
 void Renderer::Destroy()
 {
     logger::warn("Cleaning up vulkan object instances");
+    if (enableValidationLayers)
+    {
+        DestroyDebugUtilsMessengerEXT(vulkan_instance_, debug_messenger_, nullptr);
+        logger::info("Debug messenger destroyed");
+    }
 
     vkDestroyPipelineLayout(gpu_data_.device, pipeline_data_.pipeline_layout, nullptr);
     logger::info("Pipeline layout destroyed");
@@ -789,21 +865,27 @@ void Renderer::Destroy()
     logger::info("Image views destroyed");
     for (VkShaderModule frag_shader : pipeline_data_.frag_shader_modules)
         vkDestroyShaderModule(gpu_data_.device, frag_shader, nullptr);
-    logger::info("Image views destroyed");
+    logger::info("Fragment shaders destroyed");
 
     for (VkShaderModule vert_shader : pipeline_data_.vert_shader_modules)
         vkDestroyShaderModule(gpu_data_.device, vert_shader, nullptr);
-    logger::info("Image views destroyed");
+    for (VkFramebuffer frame_buffer : swapchain_data_.framebuffers)
+        vkDestroyFramebuffer(gpu_data_.device, frame_buffer, nullptr);
+    logger::info("Vertex shaders destroyed");
 
     vkDestroySwapchainKHR(gpu_data_.device, this->swapchain_data_.swap_chain, nullptr);
     logger::info("SwapchainKHR destroyed");
 
     vkDestroyDevice(gpu_data_.device, nullptr);
     logger::info("Vulkan device destroyed");
+
+    vkDestroySurfaceKHR(vulkan_instance_, vulkan_surface_,nullptr);
+    logger::info("Vulkan surface destroyed");
+
     vkDestroyInstance(vulkan_instance_, nullptr);
     logger::info("Vulkan instance destroyed");
 
-    logger::success("Vulkan object instances cleaned up");
+    logger::success("All vulkan object instances cleaned up");
 }
 void Renderer::Render()
 {
