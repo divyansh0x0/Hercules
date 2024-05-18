@@ -21,9 +21,8 @@ void update(unsigned int dt)
 //                                          Public methods
 //------------------------------------------------------------------------------------------
 
-Engine::Engine(hercules::Window* window)
+Engine::Engine(hercules::Window &window):window_(window)
 {
-    this->window_ = window;
     this->is_engine_running = true;
     logger::success("Engine created");
 }
@@ -40,13 +39,12 @@ void Engine::DestroyEngine()
 // Gives the control to game engine and shows the window if it was not visible;
 void Engine::Loop()
 {
-    window_->ShowWindow();
     logger::info("starting game loop");
 
     auto start = std::chrono::high_resolution_clock::now();
     unsigned int dt = 0;
 
-    bool is_renderer_initialized = renderer_.Initialize(window_->get_sdl_window());
+    bool is_renderer_initialized = renderer_.Initialize(window_.get_sdl_window());
 
     // if (!is_renderer_initialized)
     //     throw std::runtime_error("Vulkan renderer couldn't be initialized");
@@ -65,7 +63,7 @@ void Engine::Loop()
                 break;
 
             default:
-                window_->ProcessInput(event);
+                window_.ProcessInput(event);
                 break;
             }
         }
