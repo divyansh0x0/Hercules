@@ -46,7 +46,7 @@ void Engine::Loop()
     auto start = std::chrono::high_resolution_clock::now();
     unsigned int dt = 0;
 
-    // bool is_renderer_initialized = renderer_.Initialize(window_->get_sdl_window());
+    bool is_renderer_initialized = renderer_.Initialize(window_->get_sdl_window());
 
     // if (!is_renderer_initialized)
     //     throw std::runtime_error("Vulkan renderer couldn't be initialized");

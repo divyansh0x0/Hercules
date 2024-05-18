@@ -22,10 +22,10 @@ Window::Window(std::string window_name, int width, int height)
     }
     logger::success("SDL INITIALIZED");
 
-    this->sdl_window_ = SDL_CreateWindow(window_name.data(), SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED, width, height, SDL_WINDOW_VULKAN| SDL_WINDOW_HIDDEN);
+    this->sdl_window_ = SDL_CreateWindow(window_name.data(), SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED, width, height, SDL_WINDOW_VULKAN| SDL_WINDOW_SHOWN);
 
     /* Checks if window has been created; if not, exits program */
-    if (sdl_window_ == nullptr)
+    if (this->sdl_window_ == nullptr)
     {
         throw std::runtime_error(SDL_GetError());
     }
@@ -60,9 +60,10 @@ SDL_Renderer *Window::get_renderer()
 void Window::ShowWindow()
 {
     logger::info("Showing window");
+    if(sdl_window_ == nullptr){
+        throw std::runtime_error("Window is null" + std::string(SDL_GetError()));
+    }
     SDL_ShowWindow(get_sdl_window());
-    if(get_sdl_window() == nullptr)
-        logger::error("Window is null");
     this->window_visible = true;
 }
 void Window::HideWindow()

@@ -1,14 +1,15 @@
 #include <Hercules/shader.h>
 #include <fstream>
-
+// #include <filesystem>
 VkShaderModule CreateShaderModule(const std::string &filename, VkDevice device)
 {
+    // auto path = std::filesystem::current_path() / "shaders"/ filename;
     // Read shader data
     std::ifstream file(filename, std::ios::ate | std::ios::binary);
 
     if (!file.is_open())
     {
-        throw std::runtime_error("failed to open file!");
+        throw std::runtime_error("failed to open shader file: " + filename);
     }
     size_t code_size = (size_t)file.tellg();
     uint32_t *buffer = new uint32_t[code_size];

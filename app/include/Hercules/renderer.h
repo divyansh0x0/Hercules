@@ -29,6 +29,7 @@ struct SwapChainData
     VkFormat image_format;
     std::vector<VkImage> images;
     std::vector<VkImageView> image_views;
+    std::vector<VkFramebuffer> framebuffers;
 };
 struct QueueFamilyInfo
 {
@@ -45,11 +46,14 @@ struct GPUData
     std::string name;
     std::string device_type;
     QueueFamilyInfo queue_family_info;
-    SwapChainData swap_chain_data;
 };
 struct PipelineData
 {
+    VkPipeline pipeline;
     VkPipelineLayout pipeline_layout;
+    VkRenderPass render_pass;
+    std::vector<VkShaderModule> vert_shader_modules;
+    std::vector<VkShaderModule> frag_shader_modules;
 };
 class Renderer
 {
@@ -58,10 +62,16 @@ private:
     GPUData gpu_data_;
     PipelineData pipeline_data_;
     VkSurfaceKHR vulkan_surface_;
-
+    SwapChainData swapchain_data_;
+    void CreateVulkanSurfaceAndInstance(SDL_Window* window);
+    void CreateGPUData();
+    void CreateSwapChainData(SDL_Window* window);
+    void CreatePipelineData();
+    void CreateFramebuffers();
 public:
     Renderer();
     bool Initialize(SDL_Window *window);
     void Render();
+    void Destroy();
     ~Renderer();
 };

@@ -8,8 +8,8 @@ namespace hercules
     class Window
     {
     private:
-        SDL_Window *sdl_window_;
-        SDL_Renderer *sdl_renderer_;
+        SDL_Window* sdl_window_;
+        SDL_Renderer* sdl_renderer_;
 
     public:
         bool window_visible = false;

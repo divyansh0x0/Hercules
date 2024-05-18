@@ -9,12 +9,10 @@ int main(int argc, char *argv[])
 
     hercules::Window window("Hercules", 1000, 500);
     // window.ShowWindow();
-    bool quit = false;
 
     Engine engine(&window);
     // renderer.Initialize(window.get_sdl_window());
     // logger::info("hello");
-    window.ShowWindow();
     // SDL_Event event;
     // while (!quit)
     // {

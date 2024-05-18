@@ -32,6 +32,60 @@ struct SwapChainSupportDetails
 ///-----------------------------------------------------------------------------------------
 //                                          Utility methods
 //------------------------------------------------------------------------------------------
+bool AreExtensionsSupported(VkPhysicalDevice &gpu)
+{
+    // VkPhysicalDevice_T sl{};
+    uint32_t extensionCount;
+    vkEnumerateDeviceExtensionProperties(gpu, nullptr, &extensionCount, nullptr);
+
+    std::vector<VkExtensionProperties> availableExtensions(extensionCount);
+    vkEnumerateDeviceExtensionProperties(gpu, nullptr, &extensionCount, availableExtensions.data());
+
+    logger::info("CHECKING EXTENSION SUPPORT");
+    uint32_t extensions_found = 0;
+    for (const auto &required_extension_name : kRequiredDeviceExtensions)
+    {
+        for (VkExtensionProperties extension : availableExtensions)
+        {
+            if (strcmp(required_extension_name, extension.extensionName) == 0)
+            {
+                extensions_found++;
+                break;
+            }
+        }
+    }
+
+    return extensions_found == kRequiredDeviceExtensions.size();
+}
+QueueFamilyInfo GetQueueFamilyInfo(VkPhysicalDevice &gpu, VkInstance &vulkan_instance, VkSurfaceKHR &surface)
+{
+    uint32_t queue_family_count;
+    vkGetPhysicalDeviceQueueFamilyProperties(gpu, &queue_family_count, nullptr);
+    std::vector<VkQueueFamilyProperties> queue_families(queue_family_count);
+    vkGetPhysicalDeviceQueueFamilyProperties(gpu, &queue_family_count, queue_families.data());
+
+    // VkSurfaceKHR surface;
+    QueueFamilyInfo queue_family_info{};
+    int i = 0;
+    for (const VkQueueFamilyProperties queueFamily : queue_families)
+    {
+        uint32_t is_graphics_family_available = queueFamily.queueFlags & VK_QUEUE_GRAPHICS_BIT;
+        if (is_graphics_family_available)
+        {
+            queue_family_info.queue_count++;
+            queue_family_info.indices[0] = i;
+        }
+        VkBool32 is_present_available = false;
+        vkGetPhysicalDeviceSurfaceSupportKHR(gpu, i, surface, &is_present_available);
+        if (is_present_available)
+            queue_family_info.indices[1] = i;
+        queue_family_info.are_all_queues_available = is_graphics_family_available && is_present_available;
+        if (queue_family_info.are_all_queues_available)
+            break;
+        i++;
+    }
+    return queue_family_info;
+}
 bool GPUHasAllFeatures(VkPhysicalDevice &gpu)
 {
     VkPhysicalDeviceFeatures deviceFeatures;
@@ -91,15 +145,13 @@ bool checkValidationLayerSupport()
 
     return true;
 }
-std::vector<GPUData> GetSuitableGPUs(VkInstance &vulkan_instance)
+void GetSuitableGPUs(VkInstance &vulkan_instance, std::vector<GPUData> &suitable_devices_info)
 {
 
     uint32_t physical_device_count;
     vkEnumeratePhysicalDevices(vulkan_instance, &physical_device_count, nullptr);
     std::vector<VkPhysicalDevice> physical_devices(physical_device_count);
     vkEnumeratePhysicalDevices(vulkan_instance, &physical_device_count, physical_devices.data());
-
-    std::vector<GPUData> suitable_devices_info;
     if (physical_device_count == 0)
     {
         logger::error("Failed to find GPUs with Vulkan support!");
@@ -133,62 +185,6 @@ std::vector<GPUData> GetSuitableGPUs(VkInstance &vulkan_instance)
             }
         }
     }
-    return suitable_devices_info;
-}
-
-QueueFamilyInfo GetQueueFamilyInfo(VkPhysicalDevice &gpu, VkInstance &vulkan_instance, VkSurfaceKHR &surface)
-{
-    uint32_t queue_family_count;
-    vkGetPhysicalDeviceQueueFamilyProperties(gpu, &queue_family_count, nullptr);
-    std::vector<VkQueueFamilyProperties> queue_families(queue_family_count);
-    vkGetPhysicalDeviceQueueFamilyProperties(gpu, &queue_family_count, queue_families.data());
-
-    // VkSurfaceKHR surface;
-    QueueFamilyInfo queue_family_info{};
-    int i = 0;
-    for (const VkQueueFamilyProperties queueFamily : queue_families)
-    {
-        uint32_t is_graphics_family_available = queueFamily.queueFlags & VK_QUEUE_GRAPHICS_BIT;
-        if (is_graphics_family_available)
-        {
-            queue_family_info.queue_count++;
-            queue_family_info.indices[0] = i;
-        }
-        VkBool32 is_present_available = false;
-        vkGetPhysicalDeviceSurfaceSupportKHR(gpu, i, surface, &is_present_available);
-        if (is_present_available)
-            queue_family_info.indices[1] = i;
-        queue_family_info.are_all_queues_available = is_graphics_family_available && is_present_available;
-        if (queue_family_info.are_all_queues_available)
-            break;
-        i++;
-    }
-    return queue_family_info;
-}
-bool AreExtensionsSupported(VkPhysicalDevice &gpu)
-{
-    // VkPhysicalDevice_T sl{};
-    uint32_t extensionCount;
-    vkEnumerateDeviceExtensionProperties(gpu, nullptr, &extensionCount, nullptr);
-
-    std::vector<VkExtensionProperties> availableExtensions(extensionCount);
-    vkEnumerateDeviceExtensionProperties(gpu, nullptr, &extensionCount, availableExtensions.data());
-
-    logger::info("CHECKING EXTENSION SUPPORT");
-    uint32_t extensions_found = 0;
-    for (const auto &required_extension_name : kRequiredDeviceExtensions)
-    {
-        for (VkExtensionProperties extension : availableExtensions)
-        {
-            if (strcmp(required_extension_name, extension.extensionName) == 0)
-            {
-                extensions_found++;
-                break;
-            }
-        }
-    }
-
-    return extensions_found == kRequiredDeviceExtensions.size();
 }
 GPUData GetOneSuitableGPU(std::vector<GPUData> &gpus, VkInstance &vulkan_instance, VkSurfaceKHR &vulkan_surface)
 {
@@ -211,6 +207,7 @@ GPUData GetOneSuitableGPU(std::vector<GPUData> &gpus, VkInstance &vulkan_instanc
     logger::error("no suitable GPU found, returning first gpu");
     return gpus.at(0);
 }
+
 VkPresentModeKHR GetSuitableSwapPresentMode(const std::vector<VkPresentModeKHR> &availablePresentModes)
 {
 
@@ -268,7 +265,69 @@ VkExtent2D GetSwapExtent(const VkSurfaceCapabilitiesKHR &capabilities, SDL_Windo
  * Stores VkSwapchainKHR in gpu_info
  */
 
-bool InitVulkanInstance(SDL_Window *window, VkInstance &vulkan_instance)
+VkRenderPass CreateRenderPass(GPUData &gpu_data, SwapChainData &swap_chain_data)
+{
+    // VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL: Images used as color attachment
+    // VK_IMAGE_LAYOUT_PRESENT_SRC_KHR: Images to be presented in the swap chain
+    // VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL: Images to be used as destination for a memory copy operation
+    VkAttachmentDescription color_attachement{
+        0,                                // flags;
+        swap_chain_data.image_format,     // format;
+        VK_SAMPLE_COUNT_1_BIT,            // samples;
+        VK_ATTACHMENT_LOAD_OP_CLEAR,      // loadOp;
+        VK_ATTACHMENT_STORE_OP_STORE,     // storeOp;
+        VK_ATTACHMENT_LOAD_OP_DONT_CARE,  // stencilLoadOp;
+        VK_ATTACHMENT_STORE_OP_DONT_CARE, // stencilStoreOp;
+        VK_IMAGE_LAYOUT_UNDEFINED,        // initialLayout;
+        VK_IMAGE_LAYOUT_PRESENT_SRC_KHR,  // finalLayout;
+    };
+    VkAttachmentReference color_attachement_ref{
+        0,                                        // attachment
+        VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL, // layout
+    };
+
+    // pInputAttachments: Attachments that are read from a shader
+    // pResolveAttachments: Attachments used for multisampling color attachments
+    // pDepthStencilAttachment: Attachment for depth and stencil data
+    // pPreserveAttachments: Attachments that are not used by this subpass, but for which the data must be preserved
+    VkSubpassDescription subpass_description{
+        0,                               // flags;
+        VK_PIPELINE_BIND_POINT_GRAPHICS, // pipelineBindPoint;
+        0,                               // inputAttachmentCount;
+        nullptr,                         // pInputAttachments;
+        1,                               // colorAttachmentCount;
+        &color_attachement_ref,          // pColorAttachments;
+        nullptr,                         // pResolveAttachments;
+        nullptr,                         // pDepthStencilAttachment;
+        0,                               // preserveAttachmentCount;
+        nullptr,                         // pPreserveAttachments;
+    };
+
+    VkPipelineLayout pipeline_layout;
+    VkRenderPassCreateInfo render_pass_create_info{
+        VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO, // sType;
+        nullptr,                                   // pNext;
+        0,                                         // flags;
+        1,                                         // attachmentCount;
+        &color_attachement,                        // pAttachments;
+        1,                                         // subpassCount;
+        &subpass_description,                      // pSubpasses;
+        0,                                         // dependencyCount;
+        nullptr,                                   // pDependencies;
+    };
+    VkRenderPass render_pass;
+    vkCreateRenderPass(gpu_data.device, &render_pass_create_info, nullptr, &render_pass);
+
+    return render_pass;
+}
+
+///-----------------------------------------------------------------------------------------
+//                                          Public methods
+//------------------------------------------------------------------------------------------
+Renderer::Renderer()
+{
+}
+void Renderer::CreateVulkanSurfaceAndInstance(SDL_Window *window)
 {
     logger::info("Initializing vulkan: ");
     unsigned int extension_count;
@@ -277,12 +336,11 @@ bool InitVulkanInstance(SDL_Window *window, VkInstance &vulkan_instance)
 
     if (SDL_Vulkan_GetInstanceExtensions(window, &extension_count, extension_names.data()) == SDL_FALSE)
     {
-        logger::error("Instance extensions could not be created: " + std::string(SDL_GetError()));
+        throw std::runtime_error("Instance extensions could not be created: " + std::string(SDL_GetError()));
     }
     if (extension_count == 0)
     {
-        logger::error("No extensions are available");
-        return false;
+        throw std::runtime_error("No extensions are available");
     }
     else
     {
@@ -303,25 +361,36 @@ bool InitVulkanInstance(SDL_Window *window, VkInstance &vulkan_instance)
         extension_count,                        // enabledExtensionCount
         extension_names.data()                  // ppEnabledExtensionNames
     };
-    if (VkResult instance_creation_code = vkCreateInstance(&vulkan_instance_info, nullptr, &vulkan_instance); instance_creation_code != VK_SUCCESS)
+    if (VkResult instance_creation_code = vkCreateInstance(&vulkan_instance_info, nullptr, &this->vulkan_instance_); instance_creation_code != VK_SUCCESS)
     {
-        logger::error("Vulkan CreateInstance() failed: " + getTranslatedErrorCode(instance_creation_code));
-        return false;
+        throw std::runtime_error("Vulkan CreateInstance() failed: " + getTranslatedErrorCode(instance_creation_code));
     }
-    return true;
+
+    logger::success("Vulkan instance inititialized successfully");
+
+    // Create vulkan surface;
+    if (SDL_Vulkan_CreateSurface(window, this->vulkan_instance_, &this->vulkan_surface_) == SDL_FALSE)
+    {
+        logger::error(SDL_GetError());
+    }
+    logger::success("Vulkan surface inititialized successfully");
 }
-GPUData CreateGPUData(VkInstance &vulkan_instance, VkSurfaceKHR &vulkan_surface)
+void Renderer::CreateGPUData()
 {
     // Finding a gpu with vulkan support
-    std::vector<GPUData> gpus = GetSuitableGPUs(vulkan_instance);
-    GPUData suitable_gpu_info = GetOneSuitableGPU(gpus, vulkan_instance, vulkan_surface); // chosing first gpu as suitable gpus
+    std::vector<GPUData> gpus{};
+    GetSuitableGPUs(this->vulkan_instance_, gpus);
     if (gpus.empty())
     {
-        logger::error("No suitable GPU found for vulkan");
+        std::runtime_error("No suitable GPU found for vulkan");
     }
+    this->gpu_data_ = GetOneSuitableGPU(gpus, this->vulkan_instance_, this->vulkan_surface_); // chosing first gpu as suitable gpus
+    gpus.clear();
+
+    // Create queue families
     logger::info("Creating queue families");
     const float queue_priority_level = 1.0f;
-    QueueFamilyInfo queue_family_info = suitable_gpu_info.queue_family_info;
+    QueueFamilyInfo queue_family_info = this->gpu_data_.queue_family_info;
     std::vector<VkDeviceQueueCreateInfo> queue_create_infos;
     for (uint32_t i = 0; i < queue_family_info.queue_count; i++)
     {
@@ -344,7 +413,7 @@ GPUData CreateGPUData(VkInstance &vulkan_instance, VkSurfaceKHR &vulkan_surface)
     }
     logger::success("Queue families created!");
     logger::info("Creating VkDevice");
-    VkPhysicalDeviceFeatures deviceFeatures{};
+    VkPhysicalDeviceFeatures device_features{};
 
     VkDeviceCreateInfo device_create_info{
         VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO,                    // sType
@@ -356,25 +425,68 @@ GPUData CreateGPUData(VkInstance &vulkan_instance, VkSurfaceKHR &vulkan_surface)
         nullptr,                                                 // ppEnabledLayerNames
         static_cast<uint32_t>(kRequiredDeviceExtensions.size()), // enabledExtensionCount
         kRequiredDeviceExtensions.data(),                        // ppEnabledExtensionNames
-        &deviceFeatures,                                         // pEnabledFeatures
+        &device_features,                                        // pEnabledFeatures
     };
 
-    // creates a device and stores it in global gpu_
-    VkResult device_creation_result = vkCreateDevice(suitable_gpu_info.physical_device, &device_create_info, nullptr, &suitable_gpu_info.device);
+    // creates a device and stores it in this->gpu_data_
+    VkResult device_creation_result = vkCreateDevice(this->gpu_data_.physical_device, &device_create_info, nullptr, &this->gpu_data_.device);
     if (device_creation_result != VK_SUCCESS)
     {
-        logger::error("DEVICE CREATION FAILED ERRORCODE: " + std::to_string(device_creation_result) + " | " + getTranslatedErrorCode(device_creation_result));
+        std::runtime_error("DEVICE CREATION FAILED ERRORCODE: " + std::to_string(device_creation_result) + " | " + getTranslatedErrorCode(device_creation_result));
     }
-
-    return suitable_gpu_info;
 }
-bool CreateSwapChainViews(GPUData gpu_data)
+void Renderer::CreateSwapChainData(SDL_Window *window)
 {
+    SwapChainSupportDetails swap_chain_support = QuerySwapChainSupport(this->gpu_data_.physical_device, this->vulkan_surface_);
+
+    VkSurfaceFormatKHR surface_format = GetSuitableSwapSurfaceFormat(swap_chain_support.formats);
+    VkPresentModeKHR present_mode = GetSuitableSwapPresentMode(swap_chain_support.presentModes);
+    VkExtent2D extent = GetSwapExtent(swap_chain_support.capabilities, window);
+
+    uint32_t imageCount = swap_chain_support.capabilities.minImageCount + 1;
+    if (swap_chain_support.capabilities.maxImageCount > 0 && imageCount > swap_chain_support.capabilities.maxImageCount)
+        imageCount = swap_chain_support.capabilities.maxImageCount;
+
+    VkSwapchainCreateInfoKHR createInfo{
+        VK_STRUCTURE_TYPE_SWAPCHAIN_CREATE_INFO_KHR,      // sType;
+        nullptr,                                          // pNext;
+        0,                                                // flags;
+        this->vulkan_surface_,                            // surface;
+        imageCount,                                       // minImageCount;
+        surface_format.format,                            // imageFormat;
+        surface_format.colorSpace,                        // imageColorSpace;
+        extent,                                           // imageExtent;
+        1,                                                // imageArrayLayers;
+        VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT,              // imageUsage;
+        VK_SHARING_MODE_EXCLUSIVE,                        // imageSharingMode;
+        0,                                                // queueFamilyIndexCount;
+        nullptr,                                          // pQueueFamilyIndices;
+        swap_chain_support.capabilities.currentTransform, // preTransform;
+        VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR,                // compositeAlpha;
+        present_mode,                                     // presentMode;
+        VK_TRUE,                                          // clipped;
+        VK_NULL_HANDLE                                    // oldSwapchain;
+    };
+    // save extent and image format
+    this->swapchain_data_.extent = extent;
+    this->swapchain_data_.image_format = surface_format.format;
+    // store swap chain
+    if (vkCreateSwapchainKHR(this->gpu_data_.device, &createInfo, nullptr, &this->swapchain_data_.swap_chain) != VK_SUCCESS)
+    {
+        throw std::runtime_error("SwapchainKHR couldn't be created");
+    }
+    // store VkImages in SwapChainData
+    vkGetSwapchainImagesKHR(this->gpu_data_.device, this->swapchain_data_.swap_chain, &imageCount, nullptr);
+    this->swapchain_data_.images.resize(imageCount);
+    this->swapchain_data_.image_views.resize(imageCount);
+    vkGetSwapchainImagesKHR(this->gpu_data_.device, this->swapchain_data_.swap_chain, &imageCount, this->swapchain_data_.images.data());
+
+    // Swap chain views
     VkImageViewCreateInfo create_info{VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO};
 
     // The viewType parameter allows you to treat images as 1D textures, 2D textures, 3D textures and cube maps.
     create_info.viewType = VK_IMAGE_VIEW_TYPE_2D;
-    create_info.format = gpu_data.swap_chain_data.image_format;
+    create_info.format = this->swapchain_data_.image_format;
     // The subresourceRange field describes what the image's purpose is and which part of the image should be accessed.
     //  Our images will be used as color targets without any mipmapping levels or multiple layers.
     create_info.components = VkComponentMapping{
@@ -395,75 +507,25 @@ bool CreateSwapChainViews(GPUData gpu_data)
         0,                         // baseArrayLayer;
         1                          // layerCount;
     };
-    std::vector<VkImage> sc_images = gpu_data.swap_chain_data.images;
-    std::vector<VkImageView> sc_views = gpu_data.swap_chain_data.image_views;
+    std::vector<VkImage>* sc_images = &this->swapchain_data_.images;
+    std::vector<VkImageView>* sc_views = &this->swapchain_data_.image_views;
 
-    for (size_t i = 0; i < gpu_data.swap_chain_data.images.size(); i++)
+    for (size_t i = 0; i < this->swapchain_data_.images.size(); i++)
     {
-        create_info.image = sc_images[i];
-        if (vkCreateImageView(gpu_data.device, &create_info, nullptr, &sc_views[i]) != VK_SUCCESS)
+        create_info.image = (*sc_images)[i];
+        if (vkCreateImageView(this->gpu_data_.device, &create_info, nullptr, &(*sc_views)[i]) != VK_SUCCESS)
         {
-            logger::error("Failed to create image view for image at index:" + std::to_string(i));
-            return false;
+            throw std::runtime_error("Failed to create image view for image at index:" + std::to_string(i));
         }
     }
-    return true;
+
 }
-bool CreateSwapChain(GPUData &gpu_data, SDL_Window *window, VkSurfaceKHR &surface)
+void Renderer::CreatePipelineData()
 {
-    SwapChainSupportDetails swap_chain_support = QuerySwapChainSupport(gpu_data.physical_device, surface);
+    VkShaderModule vert_shader_module = CreateShaderModule("E:/Projects/Hercules/out/shaders/vertex_shader.spirv", this->gpu_data_.device);
+    VkShaderModule frag_shader_module = CreateShaderModule("E:/Projects/Hercules/out/shaders/fragment_shader.spirv", this->gpu_data_.device);
 
-    VkSurfaceFormatKHR surface_format = GetSuitableSwapSurfaceFormat(swap_chain_support.formats);
-    VkPresentModeKHR present_mode = GetSuitableSwapPresentMode(swap_chain_support.presentModes);
-    VkExtent2D extent = GetSwapExtent(swap_chain_support.capabilities, window);
-
-    uint32_t imageCount = swap_chain_support.capabilities.minImageCount + 1;
-    if (swap_chain_support.capabilities.maxImageCount > 0 && imageCount > swap_chain_support.capabilities.maxImageCount)
-        imageCount = swap_chain_support.capabilities.maxImageCount;
-
-    VkSwapchainCreateInfoKHR createInfo{
-        VK_STRUCTURE_TYPE_SWAPCHAIN_CREATE_INFO_KHR,      // sType;
-        nullptr,                                          // pNext;
-        0,                                                // flags;
-        surface,                                          // surface;
-        imageCount,                                       // minImageCount;
-        surface_format.format,                            // imageFormat;
-        surface_format.colorSpace,                        // imageColorSpace;
-        extent,                                           // imageExtent;
-        1,                                                // imageArrayLayers;
-        VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT,              // imageUsage;
-        VK_SHARING_MODE_EXCLUSIVE,                        // imageSharingMode;
-        0,                                                // queueFamilyIndexCount;
-        nullptr,                                          // pQueueFamilyIndices;
-        swap_chain_support.capabilities.currentTransform, // preTransform;
-        VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR,                // compositeAlpha;
-        present_mode,                                     // presentMode;
-        VK_TRUE,                                          // clipped;
-        VK_NULL_HANDLE                                    // oldSwapchain;
-    };
-    SwapChainData sc_data = gpu_data.swap_chain_data;
-    // save extent and image format
-    sc_data.extent = extent;
-    sc_data.image_format = surface_format.format;
-    // store swap chain
-    if (vkCreateSwapchainKHR(gpu_data.device, &createInfo, nullptr, &sc_data.swap_chain) != VK_SUCCESS)
-    {
-        return false;
-    }
-    // store VkImages in SwapChainData
-    vkGetSwapchainImagesKHR(gpu_data.device, sc_data.swap_chain, &imageCount, nullptr);
-    sc_data.images.resize(imageCount);
-    sc_data.image_views.resize(imageCount);
-    vkGetSwapchainImagesKHR(gpu_data.device, sc_data.swap_chain, &imageCount, sc_data.images.data());
-
-    return CreateSwapChainViews(gpu_data);
-}
-
-VkPipelineLayout CreateGraphicsPipeline(GPUData &gpu_data)
-{
-    VkShaderModule vert_shader_module = CreateShaderModule("shaders/vert.spv", gpu_data.device);
-    VkShaderModule frag_shader_module = CreateShaderModule("shaders/frag.spv", gpu_data.device);
-
+    logger::success("Shader modules created successfully");
     // The pName and pSpecializationInfo; specify the shader module containing the code, and the function to invoke, known as the entrypoint.
     // That means that it's possible to combine multiple fragment shaders into a single shader module and use
     // different entry points to differentiate between their behaviors. In this case we'll stick to the standard main, however.
@@ -498,7 +560,7 @@ VkPipelineLayout CreateGraphicsPipeline(GPUData &gpu_data)
         static_cast<uint32_t>(kDynamicStates.size()),         // dynamicStateCount
         kDynamicStates.data()                                 // pDynamicStates
     };
-    VkPipelineVertexInputStateCreateInfo vertex_input_info{
+    VkPipelineVertexInputStateCreateInfo vertex_input_state_create_info{
         VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO, // sType
         nullptr,                                                   // pNext
         0,                                                         // flags
@@ -516,29 +578,29 @@ VkPipelineLayout CreateGraphicsPipeline(GPUData &gpu_data)
 
     // If the primitiveRestartEnable member is set to VK_TRUE, then it's possible to break up lines and triangles in the
     // VK_PRIMITIVE_TOPOLOGY_LINE_STRIP topology modes by using a special index of 0xFFFF or 0xFFFFFFFF.
-    VkPipelineInputAssemblyStateCreateInfo inputAssembly{
+    VkPipelineInputAssemblyStateCreateInfo input_assembly_state_create_info{
         VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO, // sType
         nullptr,                                                     // pNext
         0,                                                           // flags
         VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST,                         // topology
         VK_FALSE,                                                    // primitiveRestartEnable
     };
-    inputAssembly.sType = VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO;
-    inputAssembly.topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
-    inputAssembly.primitiveRestartEnable = VK_FALSE;
-    VkPipelineShaderStageCreateInfo shaderStages[] = {vert_shader_stage_info, frag_shader_stage_info};
+    input_assembly_state_create_info.sType = VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO;
+    input_assembly_state_create_info.topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
+    input_assembly_state_create_info.primitiveRestartEnable = VK_FALSE;
+    VkPipelineShaderStageCreateInfo shader_stages[] = {vert_shader_stage_info, frag_shader_stage_info};
     // A viewport basically describes the region of the framebuffer that the output will be rendered to
     VkViewport viewport{
-        0.0f,                                          // x
-        0.0f,                                          // y
-        (float)gpu_data.swap_chain_data.extent.width,  // width
-        (float)gpu_data.swap_chain_data.extent.height, // height
-        0.0f,                                          // minDepth
-        1.0f,                                          // maxDepth
+        0.0f,                                       // x
+        0.0f,                                       // y
+        (float)this->swapchain_data_.extent.width,  // width
+        (float)this->swapchain_data_.extent.height, // height
+        0.0f,                                       // minDepth
+        1.0f,                                       // maxDepth
     };
     VkRect2D scissor_rect{
-        {0, 0},                         // offset VkOffset2D
-        gpu_data.swap_chain_data.extent // extent VkExtent2D
+        {0, 0},                      // offset VkOffset2D
+        this->swapchain_data_.extent // extent VkExtent2D
     };
     // The actual viewport(s) and scissor rectangle(s) will then later be set up at drawing time.
     VkPipelineViewportStateCreateInfo viewport_state_create_info{
@@ -556,7 +618,7 @@ VkPipelineLayout CreateGraphicsPipeline(GPUData &gpu_data)
     //  VK_POLYGON_MODE_LINE: polygon edges are drawn as lines
     //  VK_POLYGON_MODE_POINT: polygon vertices are drawn as points
     //  Using any mode other than fill requires enabling a GPU feature.
-    VkPipelineRasterizationStateCreateInfo rasterizer{
+    VkPipelineRasterizationStateCreateInfo rasterizer_state_create_info{
         VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO, // sType;
         nullptr,                                                    // pNext;
         0,                                                          // flags;
@@ -575,7 +637,7 @@ VkPipelineLayout CreateGraphicsPipeline(GPUData &gpu_data)
     //  scissor rectangles define in which regions pixels will actually be stored.
     // Any pixels outside the scissor rectangles will be discarded by the rasterizer
 
-    VkPipelineMultisampleStateCreateInfo multisampling{
+    VkPipelineMultisampleStateCreateInfo multisampling_state_create_info{
         VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO, // sType;
         nullptr,                                                  // pNext;
         0,                                                        // flags;
@@ -596,7 +658,7 @@ VkPipelineLayout CreateGraphicsPipeline(GPUData &gpu_data)
         VK_BLEND_OP_ADD,                                                                                          // alphaBlendOp;
         VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT | VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT // colorWriteMask;
     };
-    VkPipelineColorBlendStateCreateInfo color_blending{
+    VkPipelineColorBlendStateCreateInfo color_blending_state_create_info{
         VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO, // sType;
         nullptr,                                                  // pNext;
         0,                                                        // flags;
@@ -618,77 +680,81 @@ VkPipelineLayout CreateGraphicsPipeline(GPUData &gpu_data)
     };
 
     VkPipelineLayout pipeline_layout;
-    if (vkCreatePipelineLayout(gpu_data.device, &pipeline_layout_create_info, nullptr, &pipeline_layout) != VK_SUCCESS)
+    if (vkCreatePipelineLayout(this->gpu_data_.device, &pipeline_layout_create_info, nullptr, &pipeline_layout) != VK_SUCCESS)
     {
-        throw std::runtime_error("failed to create pipeline layout!");
+        throw std::runtime_error("Failed to create pipeline layout!");
     }
-    return pipeline_layout;
-}
-
-void CreateRenderPass(GPUData &gpu_data)
-{
-    // VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL: Images used as color attachment
-    // VK_IMAGE_LAYOUT_PRESENT_SRC_KHR: Images to be presented in the swap chain
-    // VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL: Images to be used as destination for a memory copy operation
-    VkAttachmentDescription color_attachement{
-        0,                                     // flags;
-        gpu_data.swap_chain_data.image_format, // format;
-        VK_SAMPLE_COUNT_1_BIT,                 // samples;
-        VK_ATTACHMENT_LOAD_OP_CLEAR,           // loadOp;
-        VK_ATTACHMENT_STORE_OP_STORE,          // storeOp;
-        VK_ATTACHMENT_LOAD_OP_DONT_CARE,       // stencilLoadOp;
-        VK_ATTACHMENT_STORE_OP_DONT_CARE,      // stencilStoreOp;
-        VK_IMAGE_LAYOUT_UNDEFINED,             // initialLayout;
-        VK_IMAGE_LAYOUT_PRESENT_SRC_KHR,       // finalLayout;
+    logger::success("Pipeline Layout created successfully");
+    VkRenderPass render_pass = CreateRenderPass(this->gpu_data_, this->swapchain_data_);
+    logger::success("Render pass created");
+    VkGraphicsPipelineCreateInfo pipeline_create_info{
+        VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO, // sType;
+        nullptr,                                         // pNext;
+        0,                                               // flags;
+        2,                                               // stageCount;
+        shader_stages,                                   // pStages;
+        &vertex_input_state_create_info,                 // pVertexInputState;
+        &input_assembly_state_create_info,               // pInputAssemblyState;
+        nullptr,                                         // pTessellationState;
+        &viewport_state_create_info,                     // pViewportState;
+        &rasterizer_state_create_info,                   // pRasterizationState;
+        &multisampling_state_create_info,                // pMultisampleState;
+        nullptr,                                         // pDepthStencilState;
+        &color_blending_state_create_info,               // pColorBlendState;
+        &dynamic_state_create_info,                      // pDynamicState;
+        pipeline_layout,                                 // layout;
+        render_pass,                                     // renderPass;
+        0,                                               // subpass; it is the index of the subpass in the render pass where this pipeline will be used.
+        VK_NULL_HANDLE,                                  // basePipelineHandle;
+        -1,                                              // basePipelineIndex;
     };
+    VkPipeline graphics_pipeline;
+    if (vkCreateGraphicsPipelines(this->gpu_data_.device, VK_NULL_HANDLE, 1, &pipeline_create_info, nullptr, &graphics_pipeline) != VK_SUCCESS)
+    {
+        throw std::runtime_error("failed to create graphics pipeline!");
+    }
+
+    this->pipeline_data_.pipeline = graphics_pipeline;
+    this->pipeline_data_.pipeline_layout = pipeline_layout;
+    this->pipeline_data_.render_pass = render_pass;
+    this->pipeline_data_.vert_shader_modules = {vert_shader_module};
+    this->pipeline_data_.frag_shader_modules = {frag_shader_module};
 }
+void Renderer::CreateFramebuffers(){
+    
+    std::vector<VkFramebuffer> *framebuffers = &this->swapchain_data_.framebuffers;
 
-///-----------------------------------------------------------------------------------------
-//                                          Public methods
-//------------------------------------------------------------------------------------------
+    this->swapchain_data_.framebuffers.resize(this->swapchain_data_.image_views.size());
 
-Renderer::Renderer()
-{
-    logger::success("Renderer object created");
+    for (size_t i = 0; i < this->swapchain_data_.image_views.size(); i++)
+    {
+        VkImageView attachments[] = {this->swapchain_data_.image_views[i]};
+
+        VkFramebufferCreateInfo framebuffer_info{};
+        framebuffer_info.sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO;
+        framebuffer_info.renderPass = pipeline_data_.render_pass;
+        framebuffer_info.attachmentCount = 1;
+        framebuffer_info.pAttachments = attachments;
+        framebuffer_info.width = this->swapchain_data_.extent.width;
+        framebuffer_info.height = this->swapchain_data_.extent.height;
+        framebuffer_info.layers = 1;
+
+        if (vkCreateFramebuffer(this->gpu_data_.device, &framebuffer_info, nullptr, &(*framebuffers)[i]) != VK_SUCCESS)
+        {
+            throw std::runtime_error("failed to create framebuffer!");
+        }
+    }
 }
-
 bool Renderer::Initialize(SDL_Window *window)
 {
 
-    // initialize vulkan
-    if (!InitVulkanInstance(window, vulkan_instance_))
-    {
-        logger::error("Vulkan initialization failed");
-        return false;
-    }
-    logger::success("Vulkan instance inititialized successfully");
-
-    // Create vulkan surface;
-    if (SDL_Vulkan_CreateSurface(window, vulkan_instance_, &vulkan_surface_) == SDL_FALSE)
-    {
-        logger::error(SDL_GetError());
-    }
-    logger::success("Vulkan surface inititialized successfully");
-
-    // Create gpu data
-    gpu_data_ = CreateGPUData(vulkan_instance_, vulkan_surface_);
-
-    // Store logical device in gpu data
-    VkQueue graphics_queue;
-    vkGetDeviceQueue(gpu_data_.device, gpu_data_.queue_family_info.indices[0], 0, &graphics_queue);
-    VkQueue present_queue;
-    vkGetDeviceQueue(gpu_data_.device, gpu_data_.queue_family_info.indices[1], 0, &present_queue);
-
-    // Swap chains
-
-    if (!CreateSwapChain(gpu_data_, window, vulkan_surface_))
-    {
-        logger::error("Failed to create swap chain!");
-        return false;
-    }
+    CreateVulkanSurfaceAndInstance(window);
+    CreateGPUData();
+    CreateSwapChainData(window);
     logger::success("Swap chain created successfully");
-
-    pipeline_data_.pipeline_layout = CreateGraphicsPipeline(gpu_data_);
+    CreatePipelineData();
+    logger::success("Pipeline data created successfully");
+    CreateFramebuffers();
     return true;
 }
 SDL_Rect my_rect = {0, 0, 100, 100};
@@ -707,20 +773,43 @@ void draw(SDL_Renderer *renderer, SDL_Rect *rect)
     SDL_RenderFillRect(renderer, rect);
     SDL_RenderPresent(renderer);
 }
+void Renderer::Destroy()
+{
+    logger::warn("Cleaning up vulkan object instances");
+
+    vkDestroyPipelineLayout(gpu_data_.device, pipeline_data_.pipeline_layout, nullptr);
+    logger::info("Pipeline layout destroyed");
+    vkDestroyPipeline(gpu_data_.device, pipeline_data_.pipeline, nullptr);
+    logger::info("Graphics Pipeline destroyed");
+    vkDestroyRenderPass(gpu_data_.device, pipeline_data_.render_pass, nullptr);
+    logger::info("Render pass destroyed");
+
+    for (auto imageView : this->swapchain_data_.image_views)
+        vkDestroyImageView(gpu_data_.device, imageView, nullptr);
+    logger::info("Image views destroyed");
+    for (VkShaderModule frag_shader : pipeline_data_.frag_shader_modules)
+        vkDestroyShaderModule(gpu_data_.device, frag_shader, nullptr);
+    logger::info("Image views destroyed");
+
+    for (VkShaderModule vert_shader : pipeline_data_.vert_shader_modules)
+        vkDestroyShaderModule(gpu_data_.device, vert_shader, nullptr);
+    logger::info("Image views destroyed");
+
+    vkDestroySwapchainKHR(gpu_data_.device, this->swapchain_data_.swap_chain, nullptr);
+    logger::info("SwapchainKHR destroyed");
+
+    vkDestroyDevice(gpu_data_.device, nullptr);
+    logger::info("Vulkan device destroyed");
+    vkDestroyInstance(vulkan_instance_, nullptr);
+    logger::info("Vulkan instance destroyed");
+
+    logger::success("Vulkan object instances cleaned up");
+}
 void Renderer::Render()
 {
 }
 
 Renderer::~Renderer()
 {
-    logger::warn("Renderer destroyed");
-    for (auto imageView : gpu_data_.swap_chain_data.image_views)
-    {
-        vkDestroyImageView(gpu_data_.device, imageView, nullptr);
-    }
-    vkDestroySwapchainKHR(gpu_data_.device, gpu_data_.swap_chain_data.swap_chain, nullptr);
-    vkDestroyDevice(gpu_data_.device, nullptr);
-    vkDestroyInstance(vulkan_instance_, nullptr);
-    // vkDestroyShaderModule()
-    // vkDestroyPipelineLayout(device, pipelineLayout, nullptr);
+    this->Destroy();
 }

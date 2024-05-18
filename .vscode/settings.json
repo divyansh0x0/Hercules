@@ -76,7 +76,8 @@
         "typeindex": "cpp",
         "typeinfo": "cpp",
         "variant": "cpp",
-        "chrono": "cpp"
+        "chrono": "cpp",
+        "codecvt": "cpp"
     },
     "makefile.makefilePath": "app/makefile",
     "C_Cpp.autocompleteAddParentheses": true,
