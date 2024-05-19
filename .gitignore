@@ -2,4 +2,4 @@
 /out/
 !.gitignore
 /x64/Debug
-
+/.vs/*
