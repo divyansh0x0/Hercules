@@ -4,9 +4,9 @@
 OUT := ../out
 #lists all .c files in src directory
 SRC_FILES := $(wildcard src/*.cpp) $(wildcard src/Hercules/*.cpp)
-#$(VARIABLE:OLD_SUFFIX=NEW_SUFFIX) changes extension of all .c files to .o
+#$(VARIABLE:OLD_SUFFIX=NEW_SUFFIX) changes extension of all .c files to .obj
 #creates object file names from .c file names and stores
-O_FILES = $(addprefix $(OUT)/,$(notdir $(SRC_FILES:.cpp=.o)))  
+O_FILES = $(addprefix $(OUT)/,$(notdir $(SRC_FILES:.cpp=.obj)))  
 NAME := $(OUT)/hercules
 CXX := g++
 
@@ -19,8 +19,8 @@ EXTERNAL_LIBS := ../external_libs/lib
 COMPILATION_ARGS = -pedantic -Wall -Wlogical-op -Wmissing-include-dirs -Werror -Wno-unused
 CFLAGS := -g -I $(EXTERNAL_INCLUDE_FILES) -I $(PROJECT_INCLUDE_FILES)
 
-LIBS_FLAGS := -L $(EXTERNAL_LIBS) 
-LINKER_FLAGS := -w -lSDL2 -lvulkan-1
+LIBS_SRC := -L $(EXTERNAL_LIBS) 
+LINKER_FLAGS := -w -lvulkan-1 -lSDL2main -lSDL2
 
 
 
@@ -58,7 +58,7 @@ run: $(NAME) $(SPIRV_FILES)
 #build objects	
 vpath %.cpp $(dir $(SRC_FILES))
 
-$(OUT)/%.o: %.cpp
+$(OUT)/%.obj: %.cpp
 	@echo [CREATING] $@ file from $<
 	$(CXX) $(CFLAGS) $(COMPILATION_ARGS) -c $< -o $@ 
 	
@@ -66,8 +66,8 @@ $(OUT)/%.o: %.cpp
 
 #build exe
 $(NAME) : $(O_FILES)
-	@echo $(O_FILES)
-	$(CXX) -o $(NAME) $(addprefix $(OUT)/,$(notdir $(O_FILES))) $(LIBS_FLAGS) $(LINKER_FLAGS)
+	@echo $(CXX) -o $(NAME) $(addprefix $(OUT)/,$(notdir $(O_FILES))) $(LIBS_SRC) $(LINKER_FLAGS)
+	$(CXX) -o $(NAME) $(addprefix $(OUT)/,$(notdir $(O_FILES))) $(LIBS_SRC) $(LINKER_FLAGS)
 
 
 debug:$(NAME)

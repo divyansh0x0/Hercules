@@ -1,10 +1,9 @@
 // for initializing and shutdown functions
-#define SDL_MAIN_HANDLED
 #include "logger.h"
 #include "Hercules/engine.h"
 #include "Hercules/window.h"
 
-int main(int argc, char *argv[])
+int main(int argc, char **argv)
 {
 
     hercules::Window window("Hercules", 1000, 500);
@@ -30,8 +29,8 @@ int main(int argc, char *argv[])
     //         }
     //     }
     // }
-
-    // window.ShowWindow();
+    
+     //window.ShowWindow();
     engine.Loop();
     return 0;
 }

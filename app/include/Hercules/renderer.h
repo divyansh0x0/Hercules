@@ -64,11 +64,15 @@ private:
     VkSurfaceKHR vulkan_surface_;
     SwapChainData swapchain_data_;
     VkDebugUtilsMessengerEXT debug_messenger_;
-    void CreateVulkanSurfaceAndInstance(SDL_Window* window);
+    VkSemaphore imageAvailableSemaphore;
+    VkSemaphore renderFinishedSemaphore;
+    VkFence inFlightFence;
+    void CreateVulkanSurfaceAndInstance(SDL_Window *window);
     void CreateGPUData();
-    void CreateSwapChainData(SDL_Window* window);
+    void CreateSwapChainData(SDL_Window *window);
     void CreatePipelineData();
     void CreateFramebuffers();
+
 public:
     Renderer();
     bool Initialize(SDL_Window *window);

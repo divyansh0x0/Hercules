@@ -10,7 +10,6 @@ private:
     bool is_engine_running = false;
     hercules::Window window_;
     Renderer renderer_;
-    void doInput();
 
 public:
     Engine(hercules::Window &window);
