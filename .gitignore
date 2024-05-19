@@ -1,5 +1,6 @@
 /external_libs/*
-/out/
+/.vscode/*
+/.vs/*
+/out/*
 !.gitignore
 /x64/Debug
-/.vs/*
