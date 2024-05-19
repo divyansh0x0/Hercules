@@ -1,5 +1,4 @@
 /external_libs/*
-/.vscode/*
 /.vs/*
 /out/*
 !.gitignore
