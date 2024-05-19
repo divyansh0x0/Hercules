@@ -1,5 +1,5 @@
 /external_libs/*
-# .vscode/*
-/out/*
-
+/out/
 !.gitignore
+/x64/Debug
+/Report20240519-1856.diagsession
