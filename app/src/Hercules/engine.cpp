@@ -72,7 +72,7 @@ void Engine::Loop()
         if (dt > 1000 / 60)
         {
             update(dt);
-            // renderer_.Render();
+            renderer_.Draw();
             auto end = std::chrono::high_resolution_clock::now();
             start = end;
         }

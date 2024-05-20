@@ -3,6 +3,7 @@
 #include <string>
 #include <vector>
 #include <SDL2/SDL.h>
+#include <set>
 // struct SDL_Window;
 // struct SDL_Renderer;
 // The older graphics APIs provided default state for most of the stages of the graphics pipeline.
@@ -31,12 +32,21 @@ struct SwapChainData
     std::vector<VkImageView> image_views;
     std::vector<VkFramebuffer> framebuffers;
 };
-struct QueueFamilyInfo
+struct QueueFamiliyIndices
 {
-    bool are_all_queues_available;
-    //{GraphicsFamilyIndex, PresentFamilyIndex}
-    int indices[2] = {-1, -1};
-    uint32_t queue_count;
+    int GraphicsFamilyIndex;
+    int PresentFamilyIndex;
+    bool AreAllFamiliesAvailable(){
+        return GraphicsFamilyIndex >= 0 && PresentFamilyIndex >= 0; 
+    };
+    //Fills given set with available queue indices
+    void FillSetWithAvailableIndices(std::set<uint32_t> &set){
+        if(GraphicsFamilyIndex >= 0)
+            set.insert(static_cast<uint32_t>(GraphicsFamilyIndex));
+        if(PresentFamilyIndex >= 0)
+            set.insert(static_cast<uint32_t>(PresentFamilyIndex));
+            
+    }
 };
 
 struct GPUData
@@ -45,7 +55,9 @@ struct GPUData
     VkDevice device;
     std::string name;
     std::string device_type;
-    QueueFamilyInfo queue_family_info;
+    QueueFamiliyIndices queue_family_indices;
+    VkQueue GraphicsQueue;
+    VkQueue PresentQueue;
 };
 struct PipelineData
 {
@@ -64,19 +76,27 @@ private:
     VkSurfaceKHR vulkan_surface_;
     SwapChainData swapchain_data_;
     VkDebugUtilsMessengerEXT debug_messenger_;
-    VkSemaphore imageAvailableSemaphore;
-    VkSemaphore renderFinishedSemaphore;
-    VkFence inFlightFence;
+
+    VkCommandPool command_pool_;
+    VkCommandBuffer command_buffer_;
+    VkFence in_flight_fence_;
+    VkSemaphore image_available_semaphore_;
+    VkSemaphore render_finished_semaphore_;
     void CreateVulkanSurfaceAndInstance(SDL_Window *window);
     void CreateGPUData();
     void CreateSwapChainData(SDL_Window *window);
     void CreatePipelineData();
     void CreateFramebuffers();
+    void CreateCommandPool();
+    void CreateCommandBuffer();
+    void CreateSyncObjects();
+    void RecordCommandBuffer(VkCommandBuffer &command_buffer, uint32_t image_index);
+    void DrawFrame();
 
 public:
     Renderer();
     bool Initialize(SDL_Window *window);
-    void Render();
+    void Draw();
     void Destroy();
     ~Renderer();
 };

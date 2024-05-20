@@ -81,7 +81,7 @@ static VKAPI_ATTR VkBool32 VKAPI_CALL debugCallback(VkDebugUtilsMessageSeverityF
         break;
     case VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT:
         logger::error("[VALIDATION LAYER] (ERROR)   | " + std::string(pCallbackData->pMessage));
-
+        break;
     default:
         logger::info("[VALIDATION LAYER] (GENERAL) | " + std::string(pCallbackData->pMessage));
         break;
@@ -149,7 +149,7 @@ bool AreExtensionsSupported(VkPhysicalDevice &gpu)
 
     return extensions_found == kRequiredDeviceExtensions.size();
 }
-QueueFamilyInfo GetQueueFamilyInfo(VkPhysicalDevice &gpu, VkInstance &vulkan_instance, VkSurfaceKHR &surface)
+void GetQueueFamilyIndices(VkPhysicalDevice &gpu, VkInstance &vulkan_instance, VkSurfaceKHR &surface, QueueFamiliyIndices &queue_indices)
 {
     uint32_t queue_family_count;
     vkGetPhysicalDeviceQueueFamilyProperties(gpu, &queue_family_count, nullptr);
@@ -157,26 +157,23 @@ QueueFamilyInfo GetQueueFamilyInfo(VkPhysicalDevice &gpu, VkInstance &vulkan_ins
     vkGetPhysicalDeviceQueueFamilyProperties(gpu, &queue_family_count, queue_families.data());
 
     // VkSurfaceKHR surface;
-    QueueFamilyInfo queue_family_info{};
     int i = 0;
-    for (const VkQueueFamilyProperties queueFamily : queue_families)
+    for (const VkQueueFamilyProperties queue_family : queue_families)
     {
-        uint32_t is_graphics_family_available = queueFamily.queueFlags & VK_QUEUE_GRAPHICS_BIT;
+
+        uint32_t is_graphics_family_available = queue_family.queueFlags & VK_QUEUE_GRAPHICS_BIT;
         if (is_graphics_family_available)
         {
-            queue_family_info.queue_count++;
-            queue_family_info.indices[0] = i;
+            queue_indices.GraphicsFamilyIndex = i;
         }
-        VkBool32 is_present_available = false;
-        VK_CHECK(vkGetPhysicalDeviceSurfaceSupportKHR(gpu, i, surface, &is_present_available));
-        if (is_present_available)
-            queue_family_info.indices[1] = i;
-        queue_family_info.are_all_queues_available = is_graphics_family_available && is_present_available;
-        if (queue_family_info.are_all_queues_available)
+        VkBool32 is_present_family_available = VK_FALSE;
+        vkGetPhysicalDeviceSurfaceSupportKHR(gpu, i, surface, &is_present_family_available);
+        if (is_present_family_available)
+            queue_indices.PresentFamilyIndex = i;
+        if (queue_indices.AreAllFamiliesAvailable())
             break;
         i++;
     }
-    return queue_family_info;
 }
 bool GPUHasAllFeatures(VkPhysicalDevice &gpu)
 {
@@ -249,18 +246,20 @@ void GetSuitableGPUs(VkInstance &vulkan_instance, std::vector<GPUData> &suitable
 }
 GPUData GetOneSuitableGPU(std::vector<GPUData> &gpus, VkInstance &vulkan_instance, VkSurfaceKHR &vulkan_surface)
 {
-    bool swapChainAdequate = false;
+    bool is_swap_chain_adequate = false;
+    QueueFamiliyIndices queue_indices{-1, -1};
     for (GPUData gpu_info : gpus)
     {
         // Check for GPU suitablity by checking for required extensions, swap chain support and availablity of required queues
-        QueueFamilyInfo gpu_queue_info = GetQueueFamilyInfo(gpu_info.physical_device, vulkan_instance, vulkan_surface);
-        if (gpu_queue_info.are_all_queues_available && AreExtensionsSupported(gpu_info.physical_device))
+        GetQueueFamilyIndices(gpu_info.physical_device, vulkan_instance, vulkan_surface, queue_indices);
+        if (queue_indices.AreAllFamiliesAvailable() && AreExtensionsSupported(gpu_info.physical_device))
         {
-            SwapChainSupportDetails swapChainSupport = QuerySwapChainSupport(gpu_info.physical_device, vulkan_surface);
-            swapChainAdequate = !swapChainSupport.formats.empty() && !swapChainSupport.presentModes.empty();
-            if (swapChainAdequate)
+            SwapChainSupportDetails swap_chain_support = QuerySwapChainSupport(gpu_info.physical_device, vulkan_surface);
+            is_swap_chain_adequate = !swap_chain_support.formats.empty() && !swap_chain_support.presentModes.empty();
+            if (is_swap_chain_adequate)
             {
-                gpu_info.queue_family_info = gpu_queue_info;
+                gpu_info.queue_family_indices = queue_indices;
+                logger::success("indices:: " + std::to_string(queue_indices.GraphicsFamilyIndex) + ", " + std::to_string(queue_indices.PresentFamilyIndex));
                 return gpu_info;
             }
         }
@@ -319,6 +318,7 @@ VkExtent2D GetSwapExtent(const VkSurfaceCapabilitiesKHR &capabilities, SDL_Windo
     }
     return capabilities.currentExtent;
 }
+
 ///-----------------------------------------------------------------------------------------
 //                                          Initializer methods
 //------------------------------------------------------------------------------------------
@@ -363,7 +363,15 @@ VkRenderPass CreateRenderPass(GPUData &gpu_data, SwapChainData &swap_chain_data)
         0,                               // preserveAttachmentCount;
         nullptr,                         // pPreserveAttachments;
     };
-
+    VkSubpassDependency dependency{
+        VK_SUBPASS_EXTERNAL,                           // srcSubpass;
+        0,                                             // dstSubpass;
+        VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT, // srcStageMask;
+        VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT, // dstStageMask;
+        0,                                             // srcAccessMask;
+        VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT,          // dstAccessMask;
+        0,                                             // dependencyFlags;
+    };
     VkPipelineLayout pipeline_layout;
     VkRenderPassCreateInfo render_pass_create_info{
         VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO, // sType;
@@ -373,8 +381,8 @@ VkRenderPass CreateRenderPass(GPUData &gpu_data, SwapChainData &swap_chain_data)
         &color_attachement,                        // pAttachments;
         1,                                         // subpassCount;
         &subpass_description,                      // pSubpasses;
-        0,                                         // dependencyCount;
-        nullptr,                                   // pDependencies;
+        1,                                         // dependencyCount;
+        &dependency,                               // pDependencies;
     };
     VkRenderPass render_pass;
     vkCreateRenderPass(gpu_data.device, &render_pass_create_info, nullptr, &render_pass);
@@ -460,28 +468,24 @@ void Renderer::CreateGPUData()
     // Create queue families
     logger::info("Creating queue families");
     const float queue_priority_level = 1.0f;
-    QueueFamilyInfo queue_family_info = this->gpu_data_.queue_family_info;
+    std::set<uint32_t> available_queue_indices;
+    this->gpu_data_.queue_family_indices.FillSetWithAvailableIndices(available_queue_indices);
     std::vector<VkDeviceQueueCreateInfo> queue_create_infos;
-    for (uint32_t i = 0; i < queue_family_info.queue_count; i++)
+    for (int index : available_queue_indices)
     {
-        uint32_t queue_family_index = static_cast<uint32_t>(queue_family_info.indices[i]);
-        if (queue_family_index < 0)
-        { //-ve value means queue was not found
-            logger::warn("Queue family of index " + std::to_string(queue_family_index) + " in QueueFamilyInfo struct was not found!");
-            continue;
-        }
+        uint32_t unsigned_index = static_cast<uint32_t>(index);
 
         VkDeviceQueueCreateInfo queue_create_info = {
             VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO, // sType
             nullptr,                                    // pNext
             0,                                          // flags
-            queue_family_index,                         // queueFamilyIndex
+            unsigned_index,                             // queueFamilyIndex
             1,                                          // queueCount
             &queue_priority_level                       // pQueuePriorities
         };
         queue_create_infos.push_back(queue_create_info);
     }
-    logger::success("Queue families created!");
+    logger::success("Queue families created: " + std::to_string(queue_create_infos.size()) + " out of " + std::to_string(available_queue_indices.size()));
     logger::info("Creating VkDevice");
     VkPhysicalDeviceFeatures device_features{};
 
@@ -499,11 +503,10 @@ void Renderer::CreateGPUData()
     };
 
     // creates a device and stores it in this->gpu_data_
-    VkResult device_creation_result = vkCreateDevice(this->gpu_data_.physical_device, &device_create_info, nullptr, &this->gpu_data_.device);
-    if (device_creation_result != VK_SUCCESS)
-    {
-        std::runtime_error("DEVICE CREATION FAILED ERRORCODE: " + std::to_string(device_creation_result) + " | " + getTranslatedErrorCode(device_creation_result));
-    }
+    VK_CHECK(vkCreateDevice(this->gpu_data_.physical_device, &device_create_info, nullptr, &this->gpu_data_.device));
+
+    vkGetDeviceQueue(this->gpu_data_.device, this->gpu_data_.queue_family_indices.GraphicsFamilyIndex, 0, &this->gpu_data_.GraphicsQueue);
+    vkGetDeviceQueue(this->gpu_data_.device, this->gpu_data_.queue_family_indices.PresentFamilyIndex, 0, &this->gpu_data_.PresentQueue);
 }
 void Renderer::CreateSwapChainData(SDL_Window *window)
 {
@@ -658,20 +661,8 @@ void Renderer::CreatePipelineData()
     input_assembly_state_create_info.topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
     input_assembly_state_create_info.primitiveRestartEnable = VK_FALSE;
     VkPipelineShaderStageCreateInfo shader_stages[] = {vert_shader_stage_info, frag_shader_stage_info};
-    // A viewport basically describes the region of the framebuffer that the output will be rendered to
-    VkViewport viewport{
-        0.0f,                                       // x
-        0.0f,                                       // y
-        (float)this->swapchain_data_.extent.width,  // width
-        (float)this->swapchain_data_.extent.height, // height
-        0.0f,                                       // minDepth
-        1.0f,                                       // maxDepth
-    };
-    VkRect2D scissor_rect{
-        {0, 0},                      // offset VkOffset2D
-        this->swapchain_data_.extent // extent VkExtent2D
-    };
-    // The actual viewport(s) and scissor rectangle(s) will then later be set up at drawing time.
+
+    // The actual viewport(s) and scissor rectangle(s) will later be set up at drawing time.
     VkPipelineViewportStateCreateInfo viewport_state_create_info{
         VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO, // sType
         nullptr,                                               // pNext
@@ -754,6 +745,7 @@ void Renderer::CreatePipelineData()
         throw std::runtime_error("Failed to create pipeline layout!");
     }
     logger::success("Pipeline Layout created successfully");
+
     VkRenderPass render_pass = CreateRenderPass(this->gpu_data_, this->swapchain_data_);
     logger::success("Render pass created");
     VkGraphicsPipelineCreateInfo pipeline_create_info{
@@ -815,80 +807,214 @@ void Renderer::CreateFramebuffers()
         }
     }
 }
+void Renderer::CreateCommandPool()
+{
+    int32_t graphics_family_index = this->gpu_data_.queue_family_indices.GraphicsFamilyIndex;
 
+    if (graphics_family_index < 0)
+    {
+        throw std::runtime_error("Graphics family index is invalid: " + std::to_string(graphics_family_index) + " cannot create command pool");
+    }
+    VkCommandPoolCreateInfo command_pool_create_info{
+        VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO,   // sType
+        nullptr,                                      // pNext
+        VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT,                                            // flags
+        static_cast<uint32_t>(graphics_family_index), // queueFamilyIndex
+    };
+    VK_CHECK(vkCreateCommandPool(this->gpu_data_.device, &command_pool_create_info, nullptr, &this->command_pool_));
+}
+
+void Renderer::CreateCommandBuffer()
+{
+    VkCommandBufferAllocateInfo allocInfo{
+        VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO, // sType;
+        nullptr,                                        // pNext;
+        this->command_pool_,                            // commandPool;
+        VK_COMMAND_BUFFER_LEVEL_PRIMARY,                // level;
+        1,                                              // commandBufferCount;
+    };
+
+    if (vkAllocateCommandBuffers(this->gpu_data_.device, &allocInfo, &this->command_buffer_) != VK_SUCCESS)
+    {
+        throw std::runtime_error("failed to allocate command buffers!");
+    }
+    logger::success("Command buffer created");
+}
+
+void Renderer::CreateSyncObjects()
+{
+    VkSemaphoreCreateInfo semaphore_create_info{VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO};
+    VkFenceCreateInfo fence_create_info{
+        VK_STRUCTURE_TYPE_FENCE_CREATE_INFO, // sType
+        nullptr,                             // pNext
+        0,         // flags;
+    };
+    if (vkCreateSemaphore(this->gpu_data_.device, &semaphore_create_info, nullptr, &this->image_available_semaphore_) != VK_SUCCESS ||
+        vkCreateSemaphore(this->gpu_data_.device, &semaphore_create_info, nullptr, &this->render_finished_semaphore_) != VK_SUCCESS ||
+        vkCreateFence(this->gpu_data_.device, &fence_create_info, nullptr, &this->in_flight_fence_) != VK_SUCCESS)
+    {
+        throw std::runtime_error("failed to create semaphores!");
+    }
+    logger::success("Sync objects created");
+}
 bool Renderer::Initialize(SDL_Window *window)
 {
-
     CreateVulkanSurfaceAndInstance(window);
     CreateGPUData();
     CreateSwapChainData(window);
-    logger::success("Swap chain created successfully");
     CreatePipelineData();
-    logger::success("Pipeline data created successfully");
     CreateFramebuffers();
+    CreateCommandPool();
+    CreateCommandBuffer();
+    CreateSyncObjects();
+    logger::success("Everything ready");
     return true;
 }
-SDL_Rect my_rect = {0, 0, 100, 100};
-double i = 0;
-
-void clear(SDL_Renderer *renderer)
+void Renderer::RecordCommandBuffer(VkCommandBuffer &command_buffer, uint32_t image_index)
 {
-    SDL_SetRenderDrawColor(renderer, 0, 0, 255, 255);
-    SDL_RenderClear(renderer);
-    // SDL_RenderPresent(renderer);
+    VkCommandBufferBeginInfo command_buffer_begin_info{};
+    command_buffer_begin_info.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
+    command_buffer_begin_info.flags = 0;                  // Optional
+    command_buffer_begin_info.pInheritanceInfo = nullptr; // Optional
+
+    if (vkBeginCommandBuffer(command_buffer, &command_buffer_begin_info) != VK_SUCCESS)
+    {
+        throw std::runtime_error("failed to begin recording command buffer!");
+    }
+    VkRect2D renderArea = {
+        {0, 0},                 // offset
+        swapchain_data_.extent, // extent
+    };
+    VkClearValue clearColor = {
+        VkClearColorValue{{0.0f, 0.0f, 0.0f, 1.0f}},
+    };
+    VkRenderPassBeginInfo render_pass_begin_info{
+        VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO,        // sType;
+        nullptr,                                         // pNext;
+        this->pipeline_data_.render_pass,                // renderPass;
+        this->swapchain_data_.framebuffers[image_index], // framebuffer;
+        renderArea,                                      // renderArea;
+        1,                                               // clearValueCount;
+        &clearColor,                                     // pClearValues;
+    };
+    // A viewport basically describes the region of the framebuffer that the output will be rendered to
+    VkViewport viewport{
+        0.0f,                                       // x
+        0.0f,                                       // y
+        (float)this->swapchain_data_.extent.width,  // width
+        (float)this->swapchain_data_.extent.height, // height
+        0.0f,                                       // minDepth
+        1.0f,                                       // maxDepth
+    };
+    VkRect2D scissor_rect{
+        {0, 0},                      // offset VkOffset2D
+        this->swapchain_data_.extent // extent VkExtent2D
+    };
+
+    vkCmdBeginRenderPass(command_buffer, &render_pass_begin_info, VK_SUBPASS_CONTENTS_INLINE);
+    vkCmdBindPipeline(command_buffer, VK_PIPELINE_BIND_POINT_GRAPHICS, this->pipeline_data_.pipeline);
+    vkCmdSetViewport(command_buffer, 0, 1, &viewport);
+    vkCmdSetScissor(command_buffer, 0, 1, &scissor_rect);
+    vkCmdDraw(command_buffer, 3, 1, 0, 0);
+    vkCmdEndRenderPass(command_buffer);
+
+    VK_CHECK(vkEndCommandBuffer(command_buffer));
+}
+void Renderer::DrawFrame()
+{
+    logger::info("Drawing frame");
+    uint32_t image_index;
+    vkAcquireNextImageKHR(this->gpu_data_.device, this->swapchain_data_.swap_chain, UINT64_MAX, this->image_available_semaphore_, VK_NULL_HANDLE, &image_index);
+    vkResetCommandBuffer(this->command_buffer_, 0);
+    this->RecordCommandBuffer(this->command_buffer_, image_index);
+    VkSemaphore signalSemaphores[] = {render_finished_semaphore_};
+    VkSemaphore waitSemaphores[] = {render_finished_semaphore_};
+
+    VkPipelineStageFlags wait_stages[] = {VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT};
+    VkSubmitInfo submit_info{
+        VK_STRUCTURE_TYPE_SUBMIT_INFO,  // sType;
+        nullptr,                        // pNext;
+        ARRAY_LENGTH(waitSemaphores),   // waitSemaphoreCount;
+        waitSemaphores,                 // pWaitSemaphores;
+        wait_stages,                    // pWaitDstStageMask;
+        1,                              // commandBufferCount;
+        &this->command_buffer_,         // pCommandBuffers;
+        ARRAY_LENGTH(signalSemaphores), // signalSemaphoreCount;
+        signalSemaphores,               // pSignalSemaphores;
+    };
+    VK_CHECK(vkQueueSubmit(this->gpu_data_.GraphicsQueue, 1, &submit_info, in_flight_fence_));
+    VkSwapchainKHR swap_chains[] = {this->swapchain_data_.swap_chain};
+    VkPresentInfoKHR present_info{
+        VK_STRUCTURE_TYPE_PRESENT_INFO_KHR, // sType;
+        nullptr,                            // pNext;
+        1,                                  // waitSemaphoreCount;
+        waitSemaphores,                     // pWaitSemaphores;
+        1,                                  // swapchainCount;
+        swap_chains,                        // pSwapchains;
+        &image_index,                       // pImageIndices;
+        nullptr,                            // pResults;
+    };
+    vkQueuePresentKHR(this->gpu_data_.PresentQueue, &present_info);
+}
+void Renderer::Draw()
+{
+    vkWaitForFences(this->gpu_data_.device, 1, &this->in_flight_fence_, VK_TRUE, UINT64_MAX);
+    DrawFrame();
+    vkResetFences(this->gpu_data_.device, 1, &this->in_flight_fence_);
 }
 
-void draw(SDL_Renderer *renderer, SDL_Rect *rect)
-{
-    SDL_SetRenderDrawColor(renderer, 255, 0, 0, 255);
-    SDL_RenderFillRect(renderer, rect);
-    SDL_RenderPresent(renderer);
-}
 void Renderer::Destroy()
 {
     logger::warn("Cleaning up vulkan object instances");
+
+    vkDestroySemaphore(this->gpu_data_.device, this->image_available_semaphore_, nullptr);
+    logger::info("image available semaphore destroyed");
+
+    vkDestroySemaphore(this->gpu_data_.device, this->render_finished_semaphore_, nullptr);
+    logger::info("render finished semaphore destroyed");
+    vkDestroyFence(this->gpu_data_.device, this->in_flight_fence_, nullptr);
+    logger::info("in flight fence destroyed");
+    vkDestroyCommandPool(this->gpu_data_.device, command_pool_, nullptr);
+    logger::info("command pool destroyed");
     if (enableValidationLayers)
     {
         DestroyDebugUtilsMessengerEXT(vulkan_instance_, debug_messenger_, nullptr);
         logger::info("Debug messenger destroyed");
     }
 
-    vkDestroyPipelineLayout(gpu_data_.device, pipeline_data_.pipeline_layout, nullptr);
+    vkDestroyPipelineLayout(this->gpu_data_.device, this->pipeline_data_.pipeline_layout, nullptr);
     logger::info("Pipeline layout destroyed");
-    vkDestroyPipeline(gpu_data_.device, pipeline_data_.pipeline, nullptr);
+    vkDestroyPipeline(this->gpu_data_.device, this->pipeline_data_.pipeline, nullptr);
     logger::info("Graphics Pipeline destroyed");
-    vkDestroyRenderPass(gpu_data_.device, pipeline_data_.render_pass, nullptr);
+    vkDestroyRenderPass(this->gpu_data_.device, this->pipeline_data_.render_pass, nullptr);
     logger::info("Render pass destroyed");
 
-    for (auto imageView : this->swapchain_data_.image_views)
-        vkDestroyImageView(gpu_data_.device, imageView, nullptr);
+    for (auto image_view : this->swapchain_data_.image_views)
+        vkDestroyImageView(this->gpu_data_.device, image_view, nullptr);
     logger::info("Image views destroyed");
     for (VkShaderModule frag_shader : pipeline_data_.frag_shader_modules)
-        vkDestroyShaderModule(gpu_data_.device, frag_shader, nullptr);
+        vkDestroyShaderModule(this->gpu_data_.device, frag_shader, nullptr);
     logger::info("Fragment shaders destroyed");
 
     for (VkShaderModule vert_shader : pipeline_data_.vert_shader_modules)
-        vkDestroyShaderModule(gpu_data_.device, vert_shader, nullptr);
+        vkDestroyShaderModule(this->gpu_data_.device, vert_shader, nullptr);
     for (VkFramebuffer frame_buffer : swapchain_data_.framebuffers)
-        vkDestroyFramebuffer(gpu_data_.device, frame_buffer, nullptr);
+        vkDestroyFramebuffer(this->gpu_data_.device, frame_buffer, nullptr);
     logger::info("Vertex shaders destroyed");
 
-    vkDestroySwapchainKHR(gpu_data_.device, this->swapchain_data_.swap_chain, nullptr);
+    vkDestroySwapchainKHR(this->gpu_data_.device, this->swapchain_data_.swap_chain, nullptr);
     logger::info("SwapchainKHR destroyed");
 
-    vkDestroyDevice(gpu_data_.device, nullptr);
+    vkDestroyDevice(this->gpu_data_.device, nullptr);
     logger::info("Vulkan device destroyed");
 
-    vkDestroySurfaceKHR(vulkan_instance_, vulkan_surface_,nullptr);
+    vkDestroySurfaceKHR(vulkan_instance_, vulkan_surface_, nullptr);
     logger::info("Vulkan surface destroyed");
 
     vkDestroyInstance(vulkan_instance_, nullptr);
     logger::info("Vulkan instance destroyed");
 
     logger::success("All vulkan object instances cleaned up");
-}
-void Renderer::Render()
-{
 }
 
 Renderer::~Renderer()
