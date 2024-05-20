@@ -847,7 +847,7 @@ void Renderer::CreateSyncObjects()
     VkFenceCreateInfo fence_create_info{
         VK_STRUCTURE_TYPE_FENCE_CREATE_INFO, // sType
         nullptr,                             // pNext
-        0,         // flags;
+        VK_FENCE_CREATE_SIGNALED_BIT         // flags;
     };
     if (vkCreateSemaphore(this->gpu_data_.device, &semaphore_create_info, nullptr, &this->image_available_semaphore_) != VK_SUCCESS ||
         vkCreateSemaphore(this->gpu_data_.device, &semaphore_create_info, nullptr, &this->render_finished_semaphore_) != VK_SUCCESS ||
